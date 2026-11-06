@@ -612,6 +612,11 @@ static RAMC void reverb_control(void)
 
 /* ----------------------------------------------------------------- render --- */
 static float peak;
+/* the oscilloscope: the last SCOPE_N output samples (left), written by the interrupt, read by the screen */
+#define SCOPE_N 512u
+static float scope[SCOPE_N];
+static volatile uint32_t scope_w;
+static float vu;                                   /* a slow level for the keys' lights */
 static uint8_t last_mod = 0xFF, last_dly = 0xFF, last_rev = 0xFF;
 
 static RAMC void clear_tails(int mod, int dly, int rev)
@@ -749,6 +754,9 @@ RAMC void dsp_render(int32_t *lr, uint32_t n, float gain)
             r = fm_tanhf(r);
             if (fm_fabsf(l) > peak)
                 peak = fm_fabsf(l);
+            scope[scope_w & (SCOPE_N - 1u)] = l;
+            scope_w++;
+            vu = fm_maxf(vu * 0.99995f, fm_fabsf(l));
             lr[2u * (i + j)] = (int32_t)(l * gain);
             lr[2u * (i + j) + 1u] = (int32_t)(r * gain);
         }
@@ -756,6 +764,22 @@ RAMC void dsp_render(int32_t *lr, uint32_t n, float gain)
 }
 
 int dsp_note(void) { return V.gate ? V.note : -1; }
+float dsp_vu(void) { return vu; }
+/* n samples of the output into out, starting at a rising zero crossing (a steady picture), oldest first */
+int dsp_scope(float *out, uint32_t n)
+{
+    uint32_t w = scope_w, i, start = w - n, best = start, k;
+    for (k = 0; k < SCOPE_N - n - 1u; k++) {            /* back from the newest that still leaves n after it */
+        uint32_t a = w - n - 1u - k;
+        if (scope[a & (SCOPE_N - 1u)] < 0.0f && scope[(a + 1u) & (SCOPE_N - 1u)] >= 0.0f) {
+            best = a + 1u;
+            break;
+        }
+    }
+    for (i = 0; i < n; i++)
+        out[i] = scope[(best + i) & (SCOPE_N - 1u)];
+    return best != start;
+}
 float dsp_level(void) { return V.env; }
 uint32_t dsp_arp_steps(void) { return A.steps; }
 float dsp_peak(void)

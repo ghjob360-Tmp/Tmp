@@ -1,0 +1,28 @@
+# the NTS-1 style screens: the scope while a note sounds, the value large while a knob turns, then the scope again
+wait 800
+key 7 down 100
+wait 700
+shot scope.png
+tap SEL
+wait 30
+turn K1 -12
+wait 100
+shot value.png
+wait 1600
+shot scope2.png
+turn PRESET 2
+wait 100
+shot type.png
+key 7 up
+tap FX
+wait 30
+turn PRESET 2
+tap FX
+wait 30
+turn PRESET 1
+wait 1500
+key 11 down 100
+wait 400
+key 11 up
+wait 300
+shot chain_flow.png

@@ -43,3 +43,5 @@ int dsp_note(void);                        /* the note sounding, -1 none */
 float dsp_level(void);                     /* the amp envelope, 0..1 */
 uint32_t dsp_arp_steps(void);              /* arpeggiator steps played since boot */
 float dsp_peak(void);                      /* the output's peak since the last call, 0..1 */
+float dsp_vu(void);                        /* a slowly falling level, 0..1 */
+int dsp_scope(float *out, uint32_t n);     /* the last n (< 512) output samples from a rising zero crossing */

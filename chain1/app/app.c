@@ -7,7 +7,11 @@
  *   ALGORITHM a factory sound; OCT- / OCT+ the octave; SAVE keeps the sound; HOME all notes off
  * Part of the unity build after the platform (gfx.c's drawing is in scope). The sound is in dsp.c (an o2 unit). */
 #include <stddef.h>
+#include "fastmath.h"
 #include "dsp.h"
+
+static float frac1(float x) { return x - fm_floorf(x); }
+static void popup(const char *name, const char *val, int32_t bar, int bip);
 
 /* ---------------------------------------------------------------- sounds --- */
 #define PATCH_INIT                                                                                            \
@@ -330,6 +334,7 @@ static void input(void)
     if ((e = plat_enc(EN_PRESET)) != 0) {
         type_put(ui.sect, type_get(ui.sect) + (e > 0 ? 1 : -1));
         changed();
+        popup(SECT[ui.sect].name, SECT[ui.sect].types[type_get(ui.sect)], -2000, 0);
         if (ann_on())
             ann_say(SECT[ui.sect].types[type_get(ui.sect)], 0, ANN_NOW);
     }
@@ -345,6 +350,12 @@ static void input(void)
             continue;
         p_put(pk, p_get(pk) + e * (fine ? 1 : pk->step));
         changed();
+        {                                /* the value, large, a moment (NTS-1) */
+            int32_t v = p_get(pk), bar = pk->fmt == F_BIP ? (v - 512) * 1000 / 511
+                                                          : (v - pk->lo) * 1000 / (pk->hi - pk->lo);
+            value_text(pk, v, t);
+            popup(pk->label, t, bar, pk->fmt == F_BIP);
+        }
     }
     for (i = 0; i < 4; i++) {            /* MIDI CCs into the sound (here, where the patch lives) */
         uint16_t c = cc_in[i];
@@ -387,37 +398,96 @@ static int sect_on(int s)
     }
 }
 
-static void draw(void)
+/* NTS-1 style: the top is an oscilloscope of the output, until a knob or a type changes: then the parameter's
+ * name and its value, large, for a moment, then the scope again. The chain at the bottom carries the signal: dots
+ * run through it while it sounds, dimmed through the sections that are off. */
+static struct {
+    uint32_t pop_until, top_at, bot_at;
+    char pop_name[24], pop_val[24];
+    int32_t pop_bar;                     /* 0..1000, -1 none; a bipolar one: -1000..1000 with pop_bip */
+    uint8_t pop_bip;
+    float scale;
+} vw = {0, 0, 0, "", "", -1, 0, 30.0f};
+
+static void popup(const char *name, const char *val, int32_t bar, int bip)
+{
+    copy_text(vw.pop_name, name, sizeof vw.pop_name);
+    copy_text(vw.pop_val, val, sizeof vw.pop_val);
+    vw.pop_bar = bar;
+    vw.pop_bip = (uint8_t)bip;
+    vw.pop_until = plat_ms() + 1400u;
+    ui.redraw = 1;
+}
+
+static void draw_top(void)
 {
     static const char *const N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     const section_t *s = &SECT[ui.sect];
-    char t[24], o[12];
-    int32_t x, i, note = dsp_note();
-    /* top half: the section, its type, the note */
+    char t[32], o[12];
+    int32_t i, note = dsp_note();
+    uint32_t now = plat_ms();
     cv_begin(240, 120, C_BLACK);
-    x = cv_text(10, 6, &FONT_XS, "CHAIN-1", C_GRAY);
-    num_text(set.octave, o);
-    copy_text(t, "OCT ", sizeof t);
-    text_cat(t, o, sizeof t);
-    cv_text(x + 12, 6, &FONT_XS, t, C_DIM);
-    if (ui.arp_on)
-        cv_text(170, 6, &FONT_XS, ui.arp_latch ? "ARP LATCH" : "ARP", C_HI);
-    cv_text(10, 26, &FONT_L, s->name, C_WHITE);
-    if (plat_ms() < ui.msg_until) {
-        x = cv_text(10, 72, &FONT_M, ui.msg[0], C_WHITE);
-        cv_text(x + 8, 72, &FONT_M, ui.msg[1], C_HI);
-    } else {
-        cv_text(10, 72, &FONT_M, s->types[type_get(ui.sect)], C_HI);
-    }
+    /* the header: where we are, small */
+    copy_text(t, s->name, sizeof t);
+    text_cat(t, "  ", sizeof t);
+    text_cat(t, s->types[type_get(ui.sect)], sizeof t);
+    cv_text(8, 3, &FONT_XS, t, C_GRAY);
     if (note >= 0) {
         copy_text(t, N[note % 12], sizeof t);
         num_text(note / 12 - 1, o);
         text_cat(t, o, sizeof t);
-        cv_text(230 - text_w(&FONT_L, t), 26, &FONT_L, t, C_AMB);
+        cv_text(232 - text_w(&FONT_XS, t), 3, &FONT_XS, t, C_HI);
     }
-    cv_rect(10, 108, 220, 1, C_LINE);
+    if (ui.arp_on)
+        cv_text(150, 3, &FONT_XS, ui.arp_latch ? "ARP LATCH" : "ARP", C_AMB);
+    if (now < vw.pop_until || now < ui.msg_until) {   /* the value, large */
+        const char *nm = now < vw.pop_until ? vw.pop_name : ui.msg[0], *vl = now < vw.pop_until ? vw.pop_val : ui.msg[1];
+        cv_text(120 - text_w(&FONT_S, nm) / 2, 26, &FONT_S, nm, C_GRAY);
+        cv_text(120 - text_w(&FONT_L, vl) / 2, 48, &FONT_L, vl, C_WHITE);
+        if (now < vw.pop_until && vw.pop_bar >= -1000 && !(vw.pop_bar < 0 && !vw.pop_bip)) {
+            cv_rect(30, 96, 180, 4, C_LINE);
+            if (vw.pop_bip) {
+                int32_t w = vw.pop_bar * 90 / 1000;
+                cv_rect(w < 0 ? 120 + w : 120, 96, w < 0 ? -w : w, 4, C_HI);
+                cv_rect(119, 93, 2, 10, C_GRAY);
+            } else {
+                cv_rect(30, 96, vw.pop_bar * 180 / 1000, 4, C_HI);
+            }
+        }
+    } else {                             /* the oscilloscope */
+        float buf[220], mx = 0.0f;
+        int trig = dsp_scope(buf, 220);
+        for (i = 0; i < 220; i += 20)    /* a dotted grid */
+            cv_rect(10 + i, 66, 2, 1, C_LINE);
+        for (i = 22; i < 112; i += 22)
+            cv_rect(120, i, 1, 2, C_LINE);
+        for (i = 0; i < 220; i++)
+            if (fm_fabsf(buf[i]) > mx)
+                mx = fm_fabsf(buf[i]);
+        /* a gentle auto-gain, as the NTS-1's scope keeps its picture in frame */
+        vw.scale += (fm_clampf(38.0f / fm_maxf(mx, 0.02f), 30.0f, 900.0f) - vw.scale) * 0.3f;
+        if (mx < 0.0005f) {
+            cv_rect(10, 66, 220, 1, C_DIM);
+        } else {
+            int32_t px = 10, py = 66 - (int32_t)(buf[0] * vw.scale);
+            for (i = 1; i < 220; i++) {
+                int32_t y = 66 - (int32_t)fm_clampf(buf[i] * vw.scale, -44.0f, 44.0f);
+                cv_line(px, py, 10 + i, y, trig ? C_WHITE : C_HI);
+                cv_line(px, py + 1, 10 + i, y + 1, trig ? C_WHITE : C_HI);
+                px = 10 + i;
+                py = y;
+            }
+        }
+    }
     cv_blit(0, 0);
-    /* bottom half: K1..K4, then the chain */
+}
+
+static void draw_bottom(void)
+{
+    const section_t *s = &SECT[ui.sect];
+    char t[24];
+    int32_t i;
+    float vu = dsp_vu(), tm = (float)plat_ms() * 0.001f;
     cv_begin(240, 120, C_BLACK);
     for (i = 0; i < 4; i++) {
         const param_t *k = &s->k[i];
@@ -445,7 +515,22 @@ static void draw(void)
         cv_text(bx + (34 - text_w(&FONT_XS, SECT[i].tag)) / 2, 94, &FONT_XS, SECT[i].tag,
                 here ? C_BLACK : on ? C_WHITE : C_GRAY);
     }
+    if (vu > 0.004f) {                   /* the signal running through the chain */
+        float b = fm_clampf(vu * 4.0f, 0.15f, 1.0f);
+        for (i = 0; i < 8; i++) {
+            float u = frac1(tm * 0.45f + (float)i / 8.0f);
+            int32_t x = 6 + (int32_t)(u * 226.0f), sec = (x - 6) / 38;
+            int on = sec >= S_ARP || sect_on(sec);
+            cv_rect(x, 85, 3, 3, on ? (b > 0.6f ? C_WHITE : C_HI) : C_LINE);
+        }
+    }
     cv_blit(0, 120);
+}
+
+static void draw(void)
+{
+    draw_top();
+    draw_bottom();
 }
 
 void app_ui_init(void)
@@ -457,17 +542,31 @@ void app_ui_init(void)
 void app_frame(void)
 {
     int32_t note = dsp_note();
+    uint32_t now = plat_ms();
+    int sounding = dsp_vu() > 0.004f;
     input();
-    ann_tick(plat_ms());
-    if (note != ui.last_note || (ui.msg_until && plat_ms() >= ui.msg_until)) {
+    ann_tick(now);
+    if (note != ui.last_note) {
         ui.last_note = note;
-        if (plat_ms() >= ui.msg_until)
-            ui.msg_until = 0;
+        ui.redraw = 1;
+    }
+    if ((ui.msg_until && now >= ui.msg_until) || (vw.pop_until && now >= vw.pop_until)) {
+        ui.msg_until = vw.pop_until = 0;
         ui.redraw = 1;
     }
     if (ui.redraw) {
         ui.redraw = 0;
         draw();
+        vw.top_at = vw.bot_at = now;
+    } else if (sounding || now - vw.top_at < 400u) {   /* the scope ~15 / s, the chain's dots ~7 / s */
+        if (now - vw.top_at >= 66u) {
+            vw.top_at = now;
+            draw_top();
+        }
+        if (sounding && now - vw.bot_at >= 140u) {
+            vw.bot_at = now;
+            draw_bottom();
+        }
     }
 }
 
