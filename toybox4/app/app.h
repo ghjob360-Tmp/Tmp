@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* TOYBOX-4: a four-track pocket studio for the M-VAVE FM-1, its four knobs colour-coded. The app's half of the
+/* TOYBOX-4 1.0: a four-track pocket studio for the M-VAVE FM-1, its four knobs colour-coded. The app's half of the
  * contract with fm1-base. */
 #pragma once
 #include <stdint.h>
@@ -10,9 +10,10 @@
 #define APP_BLOCK 256u
 #define APP_TOUCH                        /* velocity from the keys */
 
-/* the project (OBJ_SETTINGS), the panel calibration, the tape (the four tracks' events) */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_TAPE, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xD0000u}
+/* the store: only the panel calibration (at Felucca's settings pair); the project, the library, the tape and the
+ * samples live in the app's own flash regions (app.c) */
+enum { OBJ_PANEL, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u}
 
 void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);

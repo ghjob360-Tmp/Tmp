@@ -1,40 +1,221 @@
-# TOYBOX-4 in the host simulator: ./build.sh --host, then
+# TOYBOX-4 1.0 in the host simulator: ./build.sh --host, then
 #   app/build/host/toybox-4_host app/tests/basic.txt app/build/host
-wait 800
-expect screen 0
+wait 900
+expect mode 2
 expect track 0
-expect engine 4
-shot boot.png
-# T1 is the drums: a key is a pad
-key 0 down 110
-wait 60
-expect loud 1
-expect pad 0
-key 0 up
-key 1 down 100
-wait 120
-expect pad 1
-shot drums.png
-key 1 up
+shot tape_boot.png
 # the demo tape plays
 tap PLAY
-wait 1500
+wait 2500
 expect playing 1
 expect loud 1
-tap SEQ
+shot tape_play.png
+press GLO
+wait 100
+shot tape_tricks.png
+release GLO
+# the mixer, its pages
+tap HOME
+wait 200
+expect mode 3
+shot mix_levels.png
+tap ENV
+wait 200
+shot mix_eq.png
+tap FX
+wait 200
+shot mix_fx.png
+tap LFO
+wait 200
+shot mix_out.png
+press GLO
+tap HOME
+release GLO
+wait 200
+expect path 1
+shot mix_path.png
+# T2 in synth mode: its engine, envelope, fx, lfo, sequencer
+tap HOME
+wait 50
+tap ENV
+wait 50
+expect track 1
+tap EDIT
+wait 100
+expect mode 0
+expect kind 0
+key 7 down 100
+wait 400
+shot synth_engine.png
+key 7 up
+tap ENV
+wait 100
+key 7 down 100
 wait 300
-expect screen 4
-shot tape.png
-# T3 (the string) recorded over the loop
-tap SEL
-wait 30
+shot synth_env.png
+key 7 up
+tap FX
+wait 200
+shot synth_fx.png
+tap LFO
+wait 200
+shot synth_lfo.png
+tap SEQ
+wait 200
+expect page 4
+shot synth_seq.png
+# every engine sounds
 tap SEL
 wait 50
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_0.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_1.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_2.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_3.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_4.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_5.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_6.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_7.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_8.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_9.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+key 12 down 100
+wait 350
+expect loud 1
+shot eng_10.png
+key 12 up
+wait 150
+turn SELECT 1
+wait 80
+# drums: T1, the tape kit, every pad
+tap HOME
+wait 50
+tap SEL
+wait 50
+expect track 0
+tap ARP
+wait 100
+expect mode 1
+expect kind 1
+key 0 down 110
+wait 120
+key 0 up
+wait 60
+key 3 down 110
+wait 120
+key 3 up
+wait 60
+key 6 down 110
+wait 120
+key 6 up
+wait 60
+key 9 down 110
+wait 120
+key 9 up
+wait 60
+key 12 down 110
+wait 120
+key 12 up
+wait 60
+key 15 down 110
+wait 120
+key 15 up
+wait 60
+key 18 down 110
+wait 120
+key 18 up
+wait 60
+key 21 down 110
+wait 120
+key 21 up
+wait 60
+shot drum_slices.png
+turn SELECT 1
+wait 100
+key 0 down 110
+wait 150
+expect loud 1
+shot drum_kit.png
+key 0 up
+# record onto T3 while the tape plays
+tap HOME
+wait 50
+tap FX
+wait 50
 expect track 2
-expect events 0
 tap REC
 wait 50
 expect recording 1
+tap EDIT
+wait 50
 key 7 down 100
 wait 200
 key 7 up
@@ -43,104 +224,73 @@ wait 200
 key 11 up
 wait 100
 expect events 4
-shot recording.png
 tap REC
 wait 50
-expect recording 0
-tap EDIT
-wait 200
-expect engine 0
-key 7 down 100
-wait 150
-shot string.png
-key 7 up
-# the four engines' pictures, on T3
-turn SELECT 1
-wait 300
-key 12 down 100
-wait 150
-shot pulse.png
-key 12 up
-turn SELECT 1
-wait 300
-key 12 down 100
-wait 300
-shot fm.png
-key 12 up
-turn SELECT 1
-wait 300
-key 12 down 100
-wait 300
-shot cluster.png
-key 12 up
-turn SELECT 2
-wait 100
-expect engine 0
-# envelope, lfo, effect
-tap ENV
-wait 50
-turn K1 4
-wait 60
-key 7 down 100
-wait 300
-shot env.png
-key 7 up
-tap LFO
-wait 50
-turn K2 30
-turn K4 1
-wait 300
-shot lfo.png
-tap FX
-wait 50
-expect screen 3
-shot fx.png
-# the mixer, then the master
-tap HOME
-wait 300
-expect screen 5
-shot mixer.png
-tap HOME
-wait 300
-shot master.png
-# the tape backwards, then forwards again
+# the sequencer: ARP on T3, two keys held
 tap SEQ
-press GLO
-tap PLAY
-release GLO
-wait 600
-expect speed_neg 1
-shot backwards.png
-press GLO
-tap PLAY
-release GLO
-wait 100
-expect speed_neg 0
-# tempo, then stop
-turn ALGO 8
 wait 50
-expect tempo 120
-tap PLAY
+tap SEQ
+wait 50
+expect seq_on 1
+key 7 down 100
+key 11 down 100
+wait 800
+shot seq_arp.png
+key 7 up
+key 11 up
+turn SELECT -1
+wait 60
+turn SELECT -1
+wait 60
+turn SELECT -1
 wait 100
-expect playing 0
-# save and reboot: the recording is kept
+expect seq_type 2
+key 7 down 100
+key 14 down 100
+key 18 down 100
+wait 50
+key 7 up
+key 14 up
+key 18 up
+wait 1500
+expect balls 3
+shot seq_spin.png
+tap SEQ
+wait 50
+expect seq_on 0
+# the sampler: the VOX sound on T3, sample the tape's output
+tap SEL
+wait 50
+turn PRESET 4
+wait 100
+expect engine 10
+tap REC
+wait 300
+shot sampler_prep.png
+wait 1500
+expect sampler 2
+shot sampler_ready.png
+key 7 down 100
+wait 1200
+shot sampler_rec.png
+key 7 up
+wait 200
+expect sampler 0
+expect sampled_ds 11
+key 7 down 100
+wait 400
+expect loud 1
+key 7 up
+# help, save, reload
+press SAVE
+wait 800
+expect help 1
+shot help.png
+release SAVE
+wait 50
 tap SAVE
-wait 50
+wait 300
 expect dirty 0
 reboot
-wait 800
-tap SEL
-wait 30
-tap SEL
-wait 50
-expect track 2
-expect events 4
-expect tempo 120
-# erase: GLO + REC held
-press GLO
-press REC
 wait 900
-release REC
-release GLO
-wait 50
-expect events 0
+expect tempo 100

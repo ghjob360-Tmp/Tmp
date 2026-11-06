@@ -1,1241 +1,528 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-/* TOYBOX-4's panel. Every screen is a picture that moves with the sound, drawn in the four knobs' colours:
- * K1 blue, K2 green, K3 white, K4 orange. What a knob turns is the thing of its colour on the screen.
+/* TOYBOX-4 1.0: the panel (the unity build's app part). The interaction follows the OP-1's model (see
+ * docs/OP1_REFERENCE.md and README.md); the sound is in dsp/ (o2 units, from RAM, on both cores).
  *
- *   EDIT  SOUND  (SELECT: the engine)        SEQ   TAPE   (PLAY play / stop, REC record, GLO+PLAY reverse)
- *   ENV   ENVELOPE                           HOME  MIXER  (again: the master effects)
- *   LFO   LFO    (SELECT: the shape)         SEL / PRESET  the track (T1..T4)
- *   FX    EFFECT (SELECT: the type)          ALGORITHM     the tempo
- *   ARP   metronome   SAVE   the project      GLO held      fine steps, the shift functions (shown at the bottom)
- *   GLO + REC held: the track's tape erased   OCT- / OCT+   the octave
- * Part of the unity build after the platform: gfx.c (cv_*, fonts) and announce.c are in scope. */
+ *   EDIT   SYNTH mode (the current track plays its synth)     GLO+EDIT  revert the synth sound to its slot
+ *   ARP    DRUM mode (the current track plays its drum kit)    GLO+ARP   revert the kit
+ *   HOME   TAPE, again MIXER, again TAPE                      GLO+HOME  (mixer) the sound path
+ *   SEL ENV FX LFO   T1..T4: synth/drum: ENGINE, ENVELOPE, FX (again: on/off), LFO (again: on/off)
+ *                    tape: tracks 1..4 (GLO: mute)   mixer: LEVELS, EQ (again: on/off), MASTER FX (again: on/off), OUT
+ *   SEQ    the sequencer page (again: on / off)                GLO+SEQ   on / off from anywhere
+ *   PLAY   tape play / stop                                    GLO+PLAY  reverse
+ *   REC    tape record arm; on a sampler: sample (then hold a key)   GLO+REC held: erase the track's tape
+ *   OCT- / OCT+   octave; tape: a bar back / on (GLO: to the start / to the end)
+ *   SAVE   save the project; held: help                         GLO+SAVE  store the sound in its slot
+ *   PRESET the sound slot (1..8)    ALGORITHM the tempo (GLO: the metronome)    SELECT the page's type / browser
+ *   K1..K4 blue, green, white, orange; GLO: the second row      GLO + keys: tape tricks (tape), step entry (seq) */
 #include <stddef.h>
-#include "fastmath.h"
-#include "engine.h"
+#include "dsp/core.h"
+#include "factory.h"
+#include "ui_base.inc"
+#include "ui_pics.inc"
 
-/* ---------------------------------------------------------------- colours --- */
-#define K_BLUE RGB(70, 145, 255)
-#define K_GREEN RGB(46, 204, 113)
-#define K_WHITE RGB(236, 236, 236)
-#define K_ORANGE RGB(255, 118, 46)
-#define REDC RGB(255, 56, 72)
-#define BG RGB(8, 8, 10)
-#define G1 RGB(34, 34, 40)
-#define G2 RGB(70, 70, 78)
-#define G3 RGB(140, 140, 150)
-static const uint16_t KC[4] = {K_BLUE, K_GREEN, K_WHITE, K_ORANGE};
-static const uint16_t KD[4] = {RGB(22, 44, 82), RGB(16, 64, 38), RGB(64, 64, 68), RGB(84, 38, 16)};
-
-static float frac1(float x) { return x - fm_floorf(x); }
-
-static uint16_t mix565(uint16_t a, uint16_t b, float t)   /* a -> b */
-{
-    int r = (int)((float)(a >> 11) + ((float)(b >> 11) - (float)(a >> 11)) * t),
-        g = (int)((float)((a >> 5) & 63) + ((float)((b >> 5) & 63) - (float)((a >> 5) & 63)) * t),
-        bl = (int)((float)(a & 31) + ((float)(b & 31) - (float)(a & 31)) * t);
-    return (uint16_t)(r << 11 | g << 5 | bl);
-}
+enum { MD_SYNTH, MD_DRUM, MD_TAPE, MD_MIX };
+enum { PG_T1, PG_T2, PG_T3, PG_T4, PG_SEQ, PG_PATH };
 
 /* ------------------------------------------------------------- the project --- */
-#define PROJ_MAGIC 0x54425834u           /* "TBX4" */
-#define TAPE_MAGIC 0x54415045u
+#define NSLOT 8
 typedef struct {
-    uint32_t magic;
-    proj_t p;
-    int8_t octave;
-    uint8_t rsv[3];
-} proj_rec_t;
-typedef struct {
-    uint32_t magic;
-    tape_t t;
-} tape_rec_t;
-static proj_rec_t pr;
-static tape_rec_t tr;
-#define PJ (pr.p)                       /* (not P: host/rfm1.c has one) */
+    sound_t synth[NSLOT], drum[NSLOT];
+    dpad_t dpads[NSLOT][NDKEY];
+    char sname[NSLOT][12], dname[NSLOT][12];
+} lib_t;
+static proj_t pj;
+static lib_t lib;
+static int8_t octave;
+static uint8_t slot_sel[2];
 static uint8_t dirty;
+static int cur;                          /* the current track */
 
-
-static void track_defaults(track_t *t, int engine)
+static void mset(mod_t *m, int type, int on, const int16_t *p)
 {
-    static const uint16_t ENG0[ENG_N - 1][4] = {{300, 700, 300, 150}, {500, 500, 420, 450}, {440, 500, 200, 650},
-                                                {450, 300, 520, 400}};
+    int i;
+    m->type = (uint16_t)type;
+    m->on = (uint16_t)on;
+    for (i = 0; i < 8; i++)
+        m->p[i] = (uint16_t)(p ? p[i] : 512);
+}
+
+static void sound_default(sound_t *s, int kind)
+{
+    static const int16_t ENV_S[8] = {40, 520, 700, 380, 0, 0, 90, 700},
+                         ENV_D[8] = {560, 512, 620, 160, 0, 0, 90, 720},
+                         FXP[8] = {420, 300, 420, 300, 512, 0, 512, 0},
+                         LFOP[8] = {380, 700, 0, 2, 0, 0, 0, 0},
+                         SEQP[8] = {800, 0, 0, 0, 300, 0, 0, 600};
+    mset(&s->m[M_ENGINE], kind ? D_KIT : E_PULSE, 1, 0);
+    mset(&s->m[M_ENV], 0, 1, kind ? ENV_D : ENV_S);
+    mset(&s->m[M_FX], FX_ECHO, 0, FXP);
+    mset(&s->m[M_LFO], L_WAVE, 0, LFOP);
+    mset(&s->m[M_SEQ], kind ? Q_HANDS : Q_ARP, 0, SEQP);
+}
+
+/* the factory library: 8 synth sounds and 8 kits */
+typedef struct {
+    const char *name;
+    uint8_t engine, fx, fx_on, lfo, lfo_on;
+    int16_t ep[8], env[8], fxp[8], lfop[8];
+} preset_t;
+static const preset_t SYN_PRESETS[NSLOT] = {
+    {"PLUCK", E_STRING, FX_COIL, 1, L_WAVE, 0, {640, 420, 300, 200, 300, 600, 400, 150},
+     {0, 420, 0, 500, 0, 0, 90, 700}, {400, 500, 600, 300, 0, 0, 0, 0}, {380, 600, 0, 2, 0, 0, 0, 0}},
+    {"SQUELCH", E_PULSE, FX_KNOCK, 1, L_WAVE, 1, {400, 300, 330, 200, 650, 700, 700, 300},
+     {0, 330, 350, 150, 0, 120, 90, 720}, {700, 500, 500, 600, 400, 500, 512, 800}, {300, 620, 0, 2, 0, 3, 0, 0}},
+    {"BELLS", E_FM, FX_ECHO, 1, L_WAVE, 0, {520, 400, 300, 120, 200, 400, 600, 600},
+     {0, 700, 0, 700, 0, 0, 90, 680}, {500, 200, 500, 300, 600, 900, 512, 0}, {300, 600, 0, 0, 0, 0, 0, 0}},
+    {"SWARM", E_CLUSTER, FX_HALL, 1, L_WAVE, 1, {800, 500, 600, 500, 300, 500, 600, 300},
+     {500, 700, 800, 650, 0, 0, 90, 640}, {600, 300, 500, 350, 300, 600, 500, 700}, {150, 640, 0, 2, 0, 0, 0, 0}},
+    {"CHIPS", E_DIGITAL, FX_BITS, 0, L_WAVE, 0, {300, 600, 200, 500, 700, 600, 0, 0},
+     {0, 300, 600, 200, 300, 0, 90, 680}, {600, 500, 0, 600, 0, 500, 512, 0}, {300, 600, 0, 0, 0, 0, 0, 0}},
+    {"CZ BRASS", E_PHASE, FX_CUBE, 1, L_WAVE, 1, {400, 600, 500, 400, 0, 600, 300, 200},
+     {150, 500, 700, 350, 0, 0, 90, 700}, {500, 500, 400, 300, 500, 300, 300, 600}, {450, 560, 0, 1, 0, 0, 0, 0}},
+    {"ORGANIC", E_SPECTRA, FX_DOPPLER, 1, L_WAVE, 1, {300, 600, 400, 500, 500, 600, 500, 400},
+     {200, 600, 800, 600, 0, 0, 90, 660}, {700, 400, 300, 300, 500, 500, 512, 400}, {200, 650, 0, 1, 0, 0, 0, 0}},
+    {"VOX", E_SAMPLER, FX_HALL, 1, L_WAVE, 0, {0, 240, 1023, 1023, 0, 512, 512, 700},
+     {150, 600, 900, 600, 0, 0, 90, 680}, {500, 200, 500, 300, 500, 500, 500, 600}, {300, 600, 0, 0, 0, 0, 0, 0}},
+};
+static const char *const KIT_NAMES[NSLOT] = {"BOX KIT", "TAPE KIT", "LO-FI", "DEEP BOX", "METAL", "PERC", "ROOM", "PHONE"};
+
+static void factory_slices(dpad_t pads[NDKEY])
+{
+    int k;
+    for (k = 0; k < NDKEY; k++) {
+        pads[k].p[0] = 512;
+        pads[k].p[1] = (uint16_t)(FACTORY_SLICE[k][0] * 1023u / 65535u);
+        pads[k].p[2] = (uint16_t)(FACTORY_SLICE[k][1] * 1023u / 65535u);
+        pads[k].p[3] = 0;
+        pads[k].p[4] = 0;
+        pads[k].p[5] = 512;
+        pads[k].p[6] = 512;
+        pads[k].p[7] = 800;
+    }
+}
+
+static void lib_factory(void)
+{
+    static const int16_t FXA[8] = {500, 500, 500, 300, 500, 500, 500, 500};
     int i, k;
-    t->engine = (uint16_t)engine;
-    for (i = 0; i < ENG_N - 1; i++)
-        for (k = 0; k < 4; k++)
-            t->eng[i][k] = ENG0[i][k];
-    for (i = 0; i < NPADS; i++) {
-        t->pad[i][0] = 420;
-        t->pad[i][1] = i == 3 || i == 11 ? 650 : 380;
-        t->pad[i][2] = 500;
-        t->pad[i][3] = i == 0 ? 1000 : 780;
+    for (i = 0; i < NSLOT; i++) {
+        const preset_t *p = &SYN_PRESETS[i];
+        sound_t *s = &lib.synth[i];
+        sound_default(s, KIND_SYNTH);
+        mset(&s->m[M_ENGINE], p->engine, 1, p->ep);
+        mset(&s->m[M_ENV], 0, 1, p->env);
+        mset(&s->m[M_FX], p->fx, p->fx_on, p->fxp);
+        mset(&s->m[M_LFO], p->lfo, p->lfo_on, p->lfop);
+        copy_text(lib.sname[i], p->name, 12);
     }
-    t->env[0] = 40;
-    t->env[1] = 450;
-    t->env[2] = 650;
-    t->env[3] = 380;
-    t->lfo_shape = LFO_SINE;
-    t->lfo_target = TGT_K3;
-    t->lfo[0] = 350;
-    t->lfo[1] = 0;
-    t->lfo[2] = 0;
-    t->fx_type = FX_OFF;
-    for (i = 0; i < FX_N - 1; i++) {
-        t->fx[i][0] = 500;
-        t->fx[i][1] = 600;
-        t->fx[i][2] = 0;
-        t->fx[i][3] = 800;
+    for (i = 0; i < NSLOT; i++) {
+        sound_t *s = &lib.drum[i];
+        sound_default(s, KIND_DRUM);
+        copy_text(lib.dname[i], KIT_NAMES[i], 12);
+        if (i == 1 || i == 2 || i == 5 || i == 6) {   /* the tape kits: slices of the factory sample */
+            s->m[M_ENGINE].type = D_SLICE;
+            factory_slices(lib.dpads[i]);
+        } else {
+            drum_kit_defaults(lib.dpads[i]);
+        }
+        if (i == 2)
+            mset(&s->m[M_FX], FX_BITS, 1, FXA);
+        if (i == 3)
+            for (k = 0; k < NDKEY; k++)
+                lib.dpads[i][k].p[0] = (uint16_t)(lib.dpads[i][k].p[0] * 7u / 10u);
+        if (i == 4)
+            for (k = 0; k < NDKEY; k++)
+                lib.dpads[i][k].p[3] = 900;
+        if (i == 5)
+            for (k = 0; k < NDKEY; k++)
+                lib.dpads[i][k].p[0] = (uint16_t)(400 + (k % 6) * 60);
+        if (i == 6)
+            mset(&s->m[M_FX], FX_HALL, 1, FXA);
+        if (i == 7)
+            mset(&s->m[M_FX], FX_WIRE, 1, FXA);
     }
-    t->level = 820;
-    t->pan = 512;
-    t->mute = 0;
 }
 
-static void tape_add(int t, int tick, int note, int len, int vel)
+static void load_slot(int kind, int n)
 {
-    tape_t *tp = &tr.t;
-    uint32_t on = (uint32_t)tick | (uint32_t)note << 16 | 1u << 23 | (uint32_t)vel << 24, off;
-    int i, n = tp->n[t];
-    off = (uint32_t)((tick + len) % (int)(PJ.loop_bars * 4u * PPQ)) | (uint32_t)note << 16;
-    for (int k = 0; k < (len > 0 ? 2 : 1); k++) {
-        uint32_t e = k ? off : on;
-        if (n >= TAPE_MAX)
-            return;
-        for (i = n; i > 0 && (tp->ev[t][i - 1] & 0xFFFFu) > (e & 0xFFFFu); i--)
-            tp->ev[t][i] = tp->ev[t][i - 1];
-        tp->ev[t][i] = e;
-        n++;
+    track_t *t = &pj.t[cur];
+    n &= NSLOT - 1;
+    if (kind == KIND_SYNTH) {
+        t->synth = lib.synth[n];
+    } else {
+        int k;
+        t->drum = lib.drum[n];
+        for (k = 0; k < NDKEY; k++)
+            t->pads[k] = lib.dpads[n][k];
     }
-    tp->n[t] = (uint16_t)n;
+    slot_sel[kind] = (uint8_t)n;
 }
 
-static void project_defaults(void)
+static void store_slot(int kind)
 {
-    static const int8_t BASS[8] = {36, 36, 48, 36, 39, 36, 43, 41};
-    int i, b;
-    uint32_t w;
-    for (w = 0; w < sizeof pr / 4u; w++)
-        ((uint32_t *)(void *)&pr)[w] = 0;
-    pr.magic = PROJ_MAGIC;
-    track_defaults(&PJ.t[0], ENG_DRUM);
-    track_defaults(&PJ.t[1], ENG_PULSE);
-    PJ.t[1].eng[ENG_PULSE][2] = 330;
-    PJ.t[1].env[1] = 380;
-    PJ.t[1].env[2] = 400;
-    PJ.t[1].env[3] = 150;
-    track_defaults(&PJ.t[2], ENG_STRING);
-    PJ.t[2].fx_type = FX_FILTER;
-    PJ.t[2].fx[FX_FILTER - 1][0] = 640;
-    PJ.t[2].fx[FX_FILTER - 1][2] = 120;
-    track_defaults(&PJ.t[3], ENG_FM);
-    PJ.t[3].lfo_target = TGT_K2;
-    PJ.t[3].lfo[1] = 300;
-    PJ.t[3].env[2] = 250;
-    PJ.t[3].env[3] = 520;
-    PJ.tempo = 112;
-    PJ.loop_bars = 2;
-    PJ.speed = 767;                       /* +1x */
-    PJ.metro = 0;
-    PJ.rv_amt = 260;
-    PJ.rv_size = 500;
-    PJ.dl_amt = 180;
-    PJ.dl_fb = 420;
-    PJ.dl_div = DIV_D8;
-    /* a demo on the tape: a beat, a bass line, a bell (T3 is left for you) */
-    tr.magic = TAPE_MAGIC;
-    for (i = 0; i < NTRACKS; i++)
-        tr.t.n[i] = 0;
-    for (b = 0; b < 2; b++) {
-        int bar = b * 4 * PPQ;
-        tape_add(0, bar, 60, 0, 120);
-        tape_add(0, bar + 2 * PPQ, 60, 0, 110);
-        tape_add(0, bar + 2 * PPQ + PPQ / 2 + PPQ / 4, 60, 0, 80);
-        tape_add(0, bar + PPQ, 61, 0, 110);
-        tape_add(0, bar + 3 * PPQ, 61, 0, 115);
+    const track_t *t = &pj.t[cur];
+    int n = slot_sel[kind] & (NSLOT - 1), k;
+    if (kind == KIND_SYNTH) {
+        lib.synth[n] = t->synth;
+    } else {
+        lib.drum[n] = t->drum;
+        for (k = 0; k < NDKEY; k++)
+            lib.dpads[n][k] = t->pads[k];
+    }
+}
+
+/* the demo on the tape: a beat (T1, the tape kit), a bass (T2), bells (T4); T3 is yours */
+static void tape_demo(tape_t *tp)
+{
+    static const uint8_t BASS[16] = {36, 0, 36, 48, 0, 36, 46, 0, 41, 0, 41, 53, 0, 43, 46, 48};
+    static const uint8_t BELL[6] = {72, 79, 76, 84, 79, 74};
+    int bar, s, t;
+    for (t = 0; t < NTRK; t++)
+        tp->n[t] = 0;
+#define EV(tr, tk, nt, vl, kd)                                                                                     \
+    do {                                                                                                           \
+        if (tp->n[tr] < TAPE_EV) {                                                                                 \
+            tev_t *e = &tp->ev[tr][tp->n[tr]++];                                                                   \
+            e->tick = (uint32_t)(tk);                                                                              \
+            e->note = (uint8_t)(nt);                                                                               \
+            e->vel = (uint8_t)(vl);                                                                                \
+            e->kind = (uint8_t)(kd);                                                                               \
+            e->rsv = 0;                                                                                            \
+        }                                                                                                          \
+    } while (0)
+    for (bar = 0; bar < 4; bar++)
+        for (s = 0; s < 16; s++) {
+            uint32_t tk = (uint32_t)(bar * 16 + s) * (TPQ / 4);
+            int tr = bar == 2 ? 5 : bar == 3 ? 3 : 0;
+            if (s == 0 || s == 8 || (s == 11 && (bar & 1)) || (s == 14 && bar == 3))
+                EV(0, tk, 60, s == 0 ? 120 : 100, KIND_DRUM);          /* kick */
+            if (s == 4 || s == 12)
+                EV(0, tk, 62, 110, KIND_DRUM);                          /* snare */
+            if (!(s & 1))
+                EV(0, tk + 1, 67, (s & 3) ? 70 : 95, KIND_DRUM);        /* hat */
+            if (s == 14 && bar == 1)
+                EV(0, tk + 2, 68, 80, KIND_DRUM);                       /* open hat */
+            if (BASS[s]) {
+                EV(1, tk, BASS[s] + tr, 100, KIND_SYNTH);
+                EV(1, tk + TPQ / 5, BASS[s] + tr, 0, KIND_SYNTH);
+            }
+        }
+    for (s = 0; s < 6; s++) {
+        uint32_t tk = (uint32_t)(s * 5 + 2) * (TPQ / 2);
+        EV(3, tk, BELL[s], 90, KIND_SYNTH);
+        EV(3, tk + TPQ, BELL[s], 0, KIND_SYNTH);
+    }
+#undef EV
+    for (t = 0; t < NTRK; t++) {         /* by tick */
+        int a, b;
+        for (a = 1; a < tp->n[t]; a++) {
+            tev_t x = tp->ev[t][a];
+            b = a;
+            while (b > 0 && tp->ev[t][b - 1].tick > x.tick) {
+                tp->ev[t][b] = tp->ev[t][b - 1];
+                b--;
+            }
+            tp->ev[t][b] = x;
+        }
+    }
+}
+
+static void project_default(void)
+{
+    static const uint8_t LOOP[8] = {60, 63, 67, 70, 72, 70, 67, SEQ_TIE};
+    static const int16_t EQ[8] = {560, 512, 560, 0, 0, 0, 0, 0}, MF[8] = {380, 420, 300, 220, 500, 500, 500, 500},
+                         MO[8] = {820, 820, 320, 400, 0, 0, 0, 0};
+    int t, i;
+    uint8_t *z = (uint8_t *)(void *)&pj;
+    for (i = 0; i < (int)sizeof pj; i++)
+        z[i] = 0;
+    for (t = 0; t < NTRK; t++) {
+        track_t *tk = &pj.t[t];
+        int ss = t == 1 ? 1 : t == 2 ? 0 : t == 3 ? 2 : 3, ds = t == 0 ? 1 : 0;
+        tk->synth = lib.synth[ss];
+        tk->drum = lib.drum[ds];
+        for (i = 0; i < NDKEY; i++)
+            tk->pads[i] = lib.dpads[ds][i];
+        tk->level = 820;
+        tk->pan = 512;
+        tk->kind = t == 0 ? KIND_DRUM : KIND_SYNTH;
+        tk->seq_synth.loop_n = 8;
         for (i = 0; i < 8; i++)
-            tape_add(0, bar + i * PPQ / 2, 62, 0, i & 1 ? 70 : 95);
-        for (i = 0; i < 8; i++)
-            tape_add(1, bar + i * PPQ / 2, BASS[i], PPQ / 3, 100);
+            tk->seq_synth.loop[i] = LOOP[i];
+        for (i = 0; i < 16; i++)
+            tk->seq_synth.grid[i] = (uint8_t)((i & 3) == 0 ? 60 + (i >> 2) * 3 : 0);
+        for (i = 0; i < 32; i++)
+            tk->seq_synth.draw[i] = (uint8_t)(64 + (int)(40.0f * fm_sin_turns((float)i / 32.0f)));
+        tk->seq_drum.loop_n = 4;
+        tk->seq_drum.loop[0] = 60;
+        tk->seq_drum.loop[1] = 67;
+        tk->seq_drum.loop[2] = 62;
+        tk->seq_drum.loop[3] = 67;
+        for (i = 0; i < 16; i++)
+            tk->seq_drum.grid[i] = (uint8_t)(i % 4 == 0 ? 60 : i % 8 == 4 ? 62 : 67);
     }
-    tape_add(3, 4 * PPQ, 72, PPQ, 90);
-    tape_add(3, 4 * PPQ + 3 * PPQ / 2, 79, PPQ, 80);
+    pj.t[3].level = 700;
+    pj.t[2].pan = 380;
+    pj.t[3].pan = 660;
+    mset(&pj.eq, 0, 1, EQ);
+    mset(&pj.mfx, FX_CUBE, 1, MF);
+    mset(&pj.mout, 0, 1, MO);
+    pj.tempo = 100;
+    pj.metro = 0;
+    pj.speed = 512;
+    pj.loop_on = 1;
+    pj.loop_in = 0;
+    pj.loop_out = 4;
+    pj.sync = 1;
+    pj.detune = 512;
+    slot_sel[0] = 3;
+    slot_sel[1] = 1;
 }
 
-/* ------------------------------------------------------------------- sound --- */
-static int cur_track;
-static void midi_in(void)
-{
-    uint32_t pkt;
-    int port;
-    while (plat_midi_in(&pkt, &port)) {
-        uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = (pkt >> 24) & 0x7Fu;
-        if (st >= 0x80u && st < 0xF0u)
-            PLAT_FAR(eng_midi)(st, d1, d2, cur_track);
-    }
-}
-void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
-{
-    midi_in();
-    PLAT_FAR(eng_render)(lr, n, (float)master_q12 / 4096.0f * 8300000.0f);
-}
-void app_panic(void) { eng_panic(); }
+/* ------------------------------------------------------------- the flash --- */
+/* the project, the library and the tape: XDATA1 (0xE5000..), 3840 bytes a sector (bytes 0xF00.. kept erased);
+ * the samples: the data area, a 256-byte header page, then mu-law at 22050 Hz */
+#define PRJ_BASE PLAT_XDATA1_LO
+#define PRJ_SECT 3840u
+#define PRJ_MAGIC 0x31584254u            /* "TBX1" */
+#define SYN_BASE 0x97000u
+#define SYN_END 0xB3000u
+#define DRM_BASE 0xB3000u
+#define DRM_END PLAT_DATA_HI
+#define SMP_MAGIC 0x31504D53u            /* "SMP1" */
+typedef struct {
+    uint32_t magic, version, len, sum;
+} prj_head_t;
+typedef struct {
+    uint32_t magic, len, rate, rsv;
+} smp_head_t;
 
-static int cur_track_reset(void);
-void app_init(void)
+static uint32_t sum32(const uint8_t *p, uint32_t n, uint32_t s)
 {
-    cur_track_reset();                   /* a power-on starts from T1 and the SOUND screen */
-    if (plat_store_load(OBJ_SETTINGS, &pr, sizeof pr) != (int)sizeof pr || pr.magic != PROJ_MAGIC
-        || plat_store_load(OBJ_TAPE, &tr, sizeof tr) != (int)sizeof tr || tr.magic != TAPE_MAGIC)
-        project_defaults();
-    eng_init(&tr.t);
-    eng_project(&PJ);
-}
-
-/* ---------------------------------------------------------------- the UI --- */
-enum { S_SOUND, S_ENV, S_LFO, S_FX, S_TAPE, S_MIX, NSCREENS };
-static const char *const SCREEN_NAME[NSCREENS] = {"SOUND", "ENVELOPE", "LFO", "EFFECT", "TAPE", "MIXER"};
-static const char *const ENG_NAME[ENG_N] = {"STRING", "PULSE", "FM", "CLUSTER", "DRUMS"};
-static const char *const PAD_NAME[NPADS] = {"KCK", "SNR", "CHH", "OHH", "CLP", "TML", "TMH", "RIM", "COW",
-                                            "ZAP", "BLP", "MTL"};
-static const char *const LFO_NAME[LFO_SHAPES] = {"SINE", "TRIANGLE", "SQUARE", "RANDOM"};
-static const char *const TGT_NAME[TGT_N] = {"BLUE", "GREEN", "WHITE", "ORANGE", "PITCH", "VOLUME"};
-static const char *const FX_NAME[FX_N] = {"NO EFFECT", "DRIVE", "CRUSH", "FILTER"};
-static const char *const DIV_NAME[DIV_N] = {"1/8", "3/16", "1/4"};
-
-static struct {
-    int screen, mix_master, octave;
-    uint32_t keys, btn, now;
-    uint32_t turned_at[4];
-    char toast[2][24];
-    uint32_t toast_until;
-    uint32_t top_at, rec_t;
-    uint8_t rec_armed, playing, bottom_dirty, top_dirty, glo, erase_done;
-    int sel_pad[NTRACKS];
-    uint32_t hit_seen[NTRACKS][NPADS], hit_at[NTRACKS][NPADS];
-    uint32_t key_flash[NKEYS];
-} ui;
-
-static int cur_track_reset(void)
-{
-    uint8_t *u = (uint8_t *)(void *)&ui;
     uint32_t i;
-    for (i = 0; i < sizeof ui; i++)
-        u[i] = 0;
-    cur_track = 0;
+    for (i = 0; i < n; i++)
+        s = (s ^ p[i]) * 16777619u;
+    return s;
+}
+
+typedef struct {
+    void *p;
+    uint32_t n;
+} part_t;
+static uint8_t misc[4];
+static void parts(part_t *pt)
+{
+    pt[0].p = &pj;
+    pt[0].n = sizeof pj;
+    pt[1].p = &lib;
+    pt[1].n = sizeof lib;
+    pt[2].p = misc;
+    pt[2].n = 4;
+    pt[3].p = core_tape_rw();
+    pt[3].n = sizeof(tape_t);
+}
+
+static int project_save(void)
+{
+    static uint8_t page[256];
+    part_t pt[4];
+    prj_head_t h;
+    uint32_t total, i, pos = 0, pi = 0, off = 0, k, sect = 0;
+    int err = 0;
+    misc[0] = (uint8_t)octave;
+    misc[1] = slot_sel[0];
+    misc[2] = slot_sel[1];
+    misc[3] = (uint8_t)cur;
+    core_hold(1);
+    parts(pt);
+    h.magic = PRJ_MAGIC;
+    h.version = 1;
+    h.len = 0;
+    h.sum = 2166136261u;
+    for (i = 0; i < 4; i++) {
+        h.len += pt[i].n;
+        h.sum = sum32((const uint8_t *)pt[i].p, pt[i].n, h.sum);
+    }
+    total = sizeof h + h.len;
+    while (pos < total && !err) {        /* sector by sector, page by page */
+        uint32_t base = PRJ_BASE + sect * 4096u, in_s;
+        if (base >= PLAT_XDATA1_HI || plat_data_erase(base)) {
+            err = -1;
+            break;
+        }
+        for (in_s = 0; in_s < PRJ_SECT && pos < total; in_s += 256u) {
+            for (k = 0; k < 256u; k++, pos++) {
+                uint8_t b = 0xFF;
+                if (pos < sizeof h) {
+                    b = ((const uint8_t *)&h)[pos];
+                } else if (pos < total) {
+                    while (pi < 4 && off >= pt[pi].n) {
+                        pi++;
+                        off = 0;
+                    }
+                    if (pi < 4)
+                        b = ((const uint8_t *)pt[pi].p)[off++];
+                }
+                page[k] = b;
+            }
+            if (plat_data_write(base + in_s, page, 256)) {
+                err = -1;
+                break;
+            }
+        }
+        sect++;
+    }
+    core_hold(0);
+    return err;
+}
+
+static const uint8_t *prj_byte(uint32_t pos)
+{
+    return plat_data(PRJ_BASE + (pos / PRJ_SECT) * 4096u + pos % PRJ_SECT);
+}
+
+static int project_load(void)
+{
+    const uint8_t *q = plat_data(PRJ_BASE);
+    prj_head_t h;
+    part_t pt[4];
+    uint32_t i, pos, pi, off, s;
+    if (!q)
+        return -1;
+    for (i = 0; i < sizeof h; i++)
+        ((uint8_t *)&h)[i] = *prj_byte(i);
+    parts(pt);
+    if (h.magic != PRJ_MAGIC || h.version != 1 || h.len != pt[0].n + pt[1].n + pt[2].n + pt[3].n)
+        return -1;
+    s = 2166136261u;                     /* the sum, before anything is copied */
+    for (pos = sizeof h, i = 0; i < h.len; i++, pos++)
+        s = (s ^ *prj_byte(pos)) * 16777619u;
+    if (s != h.sum)
+        return -1;
+    core_hold(1);
+    for (pos = sizeof h, pi = 0, off = 0, i = 0; i < h.len; i++, pos++) {
+        while (pi < 4 && off >= pt[pi].n) {
+            pi++;
+            off = 0;
+        }
+        if (pi >= 4)
+            break;
+        ((uint8_t *)pt[pi].p)[off++] = *prj_byte(pos);
+    }
+    octave = (int8_t)misc[0];
+    slot_sel[0] = misc[1] & 7u;
+    slot_sel[1] = misc[2] & 7u;
+    cur = misc[3] & 3u;
+    if (octave < -3 || octave > 3)
+        octave = 0;
+    core_hold(0);
     return 0;
 }
 
-static void copy_text(char *d, const char *s, uint32_t max)
+/* the samples: a user sample in its region, or the factory one */
+static void samples_point(void)
 {
-    uint32_t i;
-    for (i = 0; i + 1u < max && s && s[i]; i++)
-        d[i] = s[i];
-    d[i] = 0;
-}
-static void text_cat(char *d, const char *s, uint32_t max)
-{
-    uint32_t n = 0;
-    while (d[n])
-        n++;
-    copy_text(d + n, s, max - n);
-}
-static void num_text(int32_t v, char *b)
-{
-    char t[12];
-    int k = 0;
-    uint32_t u = (uint32_t)(v < 0 ? -v : v);
-    do
-        t[k++] = (char)('0' + u % 10u);
-    while ((u /= 10u) && k < 11);
-    if (v < 0)
-        *b++ = '-';
-    while (k)
-        *b++ = t[--k];
-    *b = 0;
-}
-
-void app_say(const char *a, const char *b)
-{
-    copy_text(ui.toast[0], a, sizeof ui.toast[0]);
-    copy_text(ui.toast[1], b, sizeof ui.toast[1]);
-    ui.toast_until = plat_ms() + 1100u;
-    ui.top_dirty = 1;
-    if (ann_on()) {
-        char t[48];
-        copy_text(t, a, sizeof t);
-        text_cat(t, " ", sizeof t);
-        text_cat(t, b, sizeof t);
-        ann_say(t, 0, ANN_NOW);
-    }
-}
-
-/* the four knobs of a screen: what they turn, how it reads */
-enum { V_PCT, V_TIME_A, V_TIME_D, V_TIME_R, V_RATIO, V_HZ, V_TGT, V_SPEED, V_BARS, V_BPM, V_ONOFF, V_PAN };
-typedef struct {
-    const char *label;
-    uint16_t *v;
-    uint8_t fmt;
-    int16_t lo, hi, step;
-} dial_t;
-
-static void dials(dial_t d[4])
-{
-    track_t *t = &PJ.t[cur_track];
-    int i;
-    for (i = 0; i < 4; i++) {
-        d[i].label = 0;
-        d[i].v = 0;
-        d[i].fmt = V_PCT;
-        d[i].lo = 0;
-        d[i].hi = 1023;
-        d[i].step = 16;
-    }
-    switch (ui.screen) {
-    case S_SOUND:
-        if (t->engine == ENG_DRUM) {
-            static const char *const L[4] = {"PITCH", "DECAY", "TONE", "LEVEL"};
-            for (i = 0; i < 4; i++) {
-                d[i].label = L[i];
-                d[i].v = &t->pad[ui.sel_pad[cur_track]][i];
-            }
-        } else {
-            static const char *const L[4][4] = {{"DAMP", "TONE", "PLUCK", "DRIVE"}, {"WIDTH", "SUB", "CUTOFF", "RESO"},
-                                                {"RATIO", "INDEX", "FEEDBK", "ENV"}, {"SPREAD", "SHAPE", "CUTOFF", "DRIFT"}};
-            for (i = 0; i < 4; i++) {
-                d[i].label = L[t->engine][i];
-                d[i].v = &t->eng[t->engine][i];
-            }
-            if (t->engine == ENG_FM)
-                d[0].fmt = V_RATIO;
-        }
-        break;
-    case S_ENV: {
-        static const char *const L[4] = {"ATTACK", "DECAY", "SUSTAIN", "RELEASE"};
-        static const uint8_t F[4] = {V_TIME_A, V_TIME_D, V_PCT, V_TIME_R};
-        for (i = 0; i < 4; i++) {
-            d[i].label = L[i];
-            d[i].v = &t->env[i];
-            d[i].fmt = F[i];
-        }
-        break;
-    }
-    case S_LFO:
-        d[0].label = "RATE"; d[0].v = &t->lfo[0]; d[0].fmt = V_HZ;
-        d[1].label = "DEPTH"; d[1].v = &t->lfo[1];
-        d[2].label = "FADE IN"; d[2].v = &t->lfo[2];
-        d[3].label = "TARGET"; d[3].v = &t->lfo_target; d[3].fmt = V_TGT; d[3].hi = TGT_N - 1; d[3].step = 1;
-        break;
-    case S_FX:
-        if (t->fx_type != FX_OFF) {
-            static const char *const L[3][4] = {{"DRIVE", "TONE", "BIAS", "MIX"}, {"BITS", "RATE", "FOLD", "MIX"},
-                                                {"CUTOFF", "RESO", "SWEEP", "MIX"}};
-            for (i = 0; i < 4; i++) {
-                d[i].label = L[t->fx_type - 1][i];
-                d[i].v = &t->fx[t->fx_type - 1][i];
-            }
-        }
-        break;
-    case S_TAPE:
-        d[0].label = "SPEED"; d[0].v = &PJ.speed; d[0].fmt = V_SPEED; d[0].step = 8;
-        d[1].label = "BARS"; d[1].v = &PJ.loop_bars; d[1].fmt = V_BARS; d[1].lo = 1; d[1].hi = 8; d[1].step = 1;
-        d[2].label = "TEMPO"; d[2].v = &PJ.tempo; d[2].fmt = V_BPM; d[2].lo = 40; d[2].hi = 240; d[2].step = 1;
-        d[3].label = "MUTE"; d[3].v = &t->mute; d[3].fmt = V_ONOFF; d[3].hi = 1; d[3].step = 1;
-        break;
-    case S_MIX:
-        if (ui.mix_master) {
-            static const char *const L[4] = {"REVERB", "SIZE", "DELAY", "FEEDBK"};
-            uint16_t *v[4] = {&PJ.rv_amt, &PJ.rv_size, &PJ.dl_amt, &PJ.dl_fb};
-            for (i = 0; i < 4; i++) {
-                d[i].label = L[i];
-                d[i].v = v[i];
-            }
-        } else {
-            static const char *const L[4] = {"T1", "T2", "T3", "T4"};
-            for (i = 0; i < 4; i++) {
-                d[i].label = L[i];
-                d[i].v = ui.glo ? &PJ.t[i].pan : &PJ.t[i].level;
-                d[i].fmt = ui.glo ? V_PAN : V_PCT;
-            }
-        }
-        break;
-    default:
-        break;
-    }
-}
-
-static void value_text(const dial_t *d, char *t)
-{
-    int32_t v = *d->v;
-    char n[12];
-    float x = (float)v / 1023.0f;
-    t[0] = 0;
-    switch (d->fmt) {
-    case V_TIME_A: case V_TIME_D: case V_TIME_R: {
-        float s = d->fmt == V_TIME_A ? 0.001f * fm_powf(2000.0f, x)
-                : d->fmt == V_TIME_D ? 0.01f * fm_powf(300.0f, x) : 0.005f * fm_powf(800.0f, x);
-        if (s < 1.0f) {
-            num_text((int32_t)(s * 1000.0f), t);
-            text_cat(t, "ms", 12);
-        } else {
-            num_text((int32_t)s, t);
-            text_cat(t, ".", 12);
-            num_text((int32_t)(s * 10.0f) % 10, n);
-            text_cat(t, n, 12);
-            text_cat(t, "s", 12);
-        }
-        break;
-    }
-    case V_RATIO: {
-        static const char *const R[8] = {"x0.5", "x1", "x1.5", "x2", "x3", "x4", "x5", "x7"};
-        copy_text(t, R[(int)(x * 7.99f)], 12);
-        break;
-    }
-    case V_HZ: {
-        float hz = 0.05f * fm_exp2f(x * 9.0f);
-        num_text((int32_t)hz, t);
-        text_cat(t, ".", 12);
-        num_text((int32_t)(hz * 10.0f) % 10, n);
-        text_cat(t, n, 12);
-        text_cat(t, "Hz", 12);
-        break;
-    }
-    case V_TGT: copy_text(t, TGT_NAME[v % TGT_N], 12); break;
-    case V_SPEED: {
-        float s = (x * 1023.0f - 512.0f) * (2.0f / 511.0f);
-        int32_t c = (int32_t)(s * 100.0f + (s < 0.0f ? -0.5f : 0.5f));
-        if (c > -4 && c < 4) {
-            copy_text(t, "STOP", 12);
-            break;
-        }
-        copy_text(t, c < 0 ? "-" : "+", 12);
-        num_text((c < 0 ? -c : c) / 100, n);
-        text_cat(t, n, 12);
-        text_cat(t, ".", 12);
-        num_text((c < 0 ? -c : c) / 10 % 10, n);
-        text_cat(t, n, 12);
-        text_cat(t, "x", 12);
-        break;
-    }
-    case V_BARS: num_text(v, t); text_cat(t, v == 1 ? " BAR" : " BARS", 12); break;
-    case V_BPM: num_text(v, t); break;
-    case V_ONOFF: copy_text(t, v ? "MUTED" : "ON", 12); break;
-    case V_PAN:
-        if (v > 500 && v < 524) copy_text(t, "C", 12);
-        else { copy_text(t, v < 512 ? "L" : "R", 12); num_text((v < 512 ? 512 - v : v - 512) * 100 / 511, n); text_cat(t, n, 12); }
-        break;
-    default: num_text(v * 100 / 1023, t); break;
-    }
-}
-
-static void changed(void)
-{
-    dirty = 1;
-    ui.bottom_dirty = 1;
-    ui.top_dirty = 1;
-    eng_project(&PJ);
-}
-
-static void go(int s)
-{
-    if (s == S_MIX && ui.screen == S_MIX)
-        ui.mix_master ^= 1;
-    else if (s == S_MIX)
-        ui.mix_master = 0;
-    ui.screen = s;
-    ui.bottom_dirty = ui.top_dirty = 1;
-    if (ann_on())
-        ann_say(s == S_MIX && ui.mix_master ? "MASTER" : SCREEN_NAME[s], 0, ANN_NOW);
-}
-
-static void track_select(int t)
-{
-    char n[4] = {'T', (char)('1' + t), 0, 0};
-    cur_track = t;
-    ui.bottom_dirty = ui.top_dirty = 1;
-    app_say(n, ENG_NAME[PJ.t[t].engine % ENG_N]);
-}
-
-/* --------------------------------------------------------------- input --- */
-static void input(void)
-{
-    uint32_t keys, btn = plat_buttons(), k, now = plat_ms();
-    int i, glo = (int)((btn >> B_GLO) & 1u);
-    int32_t e;
-    dial_t d[4];
-    track_t *t = &PJ.t[cur_track];
-    touch_poll();
-    keys = touch_keys();
-    if (glo != ui.glo) {                 /* shift: the bottom shows the shift functions */
-        ui.glo = (uint8_t)glo;
-        ui.bottom_dirty = 1;
-    }
-    for (k = 0; k < NKEYS; k++) {
-        uint32_t bit = 1u << k;
-        int note = t->engine == ENG_DRUM ? 60 + (int)(k % NPADS) : 53 + (int)k + 12 * ui.octave;
-        if ((keys & bit) && !(ui.keys & bit)) {
-            uint32_t v = touch_vel(k);
-            v = v ? v : 100u;
-            eng_key(cur_track, note, (int)v);
-            plat_midi_send(((uint32_t)(0x09u | 0x90u << 8) + ((uint32_t)cur_track << 8)) | (uint32_t)note << 16 | v << 24,
-                           TO_USB);
-            ui.key_flash[k] = now;
-        } else if (!(keys & bit) && (ui.keys & bit)) {
-            eng_key(cur_track, note, 0);
-            plat_midi_send(((uint32_t)(0x08u | 0x80u << 8) + ((uint32_t)cur_track << 8)) | (uint32_t)note << 16, TO_USB);
-        }
-    }
-    for (k = 0; k < NB; k++) {
-        uint32_t bit = 1u << k;
-        if (!(btn & bit) || (ui.btn & bit))
-            continue;
-        switch (k) {
-        case B_EDIT: go(S_SOUND); break;
-        case B_ENV: go(S_ENV); break;
-        case B_LFO: go(S_LFO); break;
-        case B_FX: go(S_FX); break;
-        case B_SEQ: go(S_TAPE); break;
-        case B_HOME: go(S_MIX); break;
-        case B_SEL: track_select((cur_track + 1) % NTRACKS); break;
-        case B_PLAY:
-            if (glo) {                   /* the tape turned around */
-                PJ.speed = (uint16_t)(1024 - PJ.speed > 1023 ? 1023 : 1024 - PJ.speed);
-                changed();
-                app_say("TAPE", (int)PJ.speed < 512 ? "BACKWARDS" : "FORWARDS");
-            } else {
-                ui.playing ^= 1u;
-                eng_transport(ui.playing, ui.rec_armed);
-                ui.top_dirty = 1;
-            }
-            break;
-        case B_REC:
-            ui.rec_t = now;
-            ui.erase_done = 0;
-            if (!glo) {
-                ui.rec_armed ^= 1u;
-                eng_transport(ui.playing, ui.rec_armed);
-                app_say(ui.rec_armed ? "RECORD" : "RECORD", ui.rec_armed ? "ARMED" : "OFF");
-            }
-            break;
-        case B_ARP:
-            PJ.metro ^= 1u;
-            changed();
-            app_say("METRONOME", PJ.metro ? "ON" : "OFF");
-            break;
-        case B_SAVE:
-            if (plat_store_save(OBJ_SETTINGS, &pr, sizeof pr) == 0 && plat_store_save(OBJ_TAPE, &tr, sizeof tr) == 0) {
-                dirty = 0;
-                app_say("SAVED", "PROJECT");
-            } else {
-                app_say("SAVE", "FAILED");
-            }
-            ui.bottom_dirty = 1;
-            break;
-        case B_OCTDN: case B_OCTUP: {
-            int o = clamp(ui.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
-            char n[8];
-            if (o != ui.octave) {
-                ui.octave = o;
-                num_text(o, n);
-                app_say("OCTAVE", n);
-            }
-            break;
-        }
-        default: break;
-        }
-    }
-    if (glo && ((btn >> B_REC) & 1u) && !ui.erase_done && now - ui.rec_t > 700u) {   /* GLO + REC held: erase */
-        ui.erase_done = 1;
-        eng_clear_track(cur_track);
-        app_say("ERASED", "TRACK");
-        dirty = 1;
-    }
-    if ((e = plat_enc(EN_PRESET)) != 0)
-        track_select((cur_track + NTRACKS + (e > 0 ? 1 : -1)) % NTRACKS);
-    if ((e = plat_enc(EN_ALGO)) != 0) {  /* the tempo, anywhere */
-        char n[8];
-        PJ.tempo = (uint16_t)clamp((int32_t)PJ.tempo + e, 40, 240);
-        changed();
-        num_text(PJ.tempo, n);
-        app_say("TEMPO", n);
-    }
-    if ((e = plat_enc(EN_SELECT)) != 0) {   /* the screen's type */
-        int dir = e > 0 ? 1 : -1;
-        switch (ui.screen) {
-        case S_SOUND:
-            t->engine = (uint16_t)((t->engine + ENG_N + (uint16_t)dir) % ENG_N);
-            eng_panic();
-            app_say("SOUND", ENG_NAME[t->engine]);
-            break;
-        case S_LFO:
-            t->lfo_shape = (uint16_t)((t->lfo_shape + LFO_SHAPES + (uint16_t)dir) % LFO_SHAPES);
-            app_say("LFO", LFO_NAME[t->lfo_shape]);
-            break;
-        case S_FX:
-            t->fx_type = (uint16_t)((t->fx_type + FX_N + (uint16_t)dir) % FX_N);
-            app_say("EFFECT", FX_NAME[t->fx_type]);
-            break;
-        case S_TAPE: {
-            static const uint16_t BARS[4] = {1, 2, 4, 8};
-            int b = 0;
-            while (b < 3 && BARS[b] < PJ.loop_bars)
-                b++;
-            PJ.loop_bars = BARS[clamp(b + dir, 0, 3)];
-            break;
-        }
-        case S_MIX:
-            PJ.dl_div = (uint16_t)((PJ.dl_div + DIV_N + (uint16_t)dir) % DIV_N);
-            app_say("DELAY", DIV_NAME[PJ.dl_div]);
-            break;
-        default: break;
-        }
-        changed();
-    }
-    dials(d);
-    for (i = 0; i < 4; i++) {
-        int32_t v;
-        if ((e = plat_enc(EN_K1 + i)) == 0 || !d[i].v)
-            continue;
-        if (d[i].fmt == V_BARS) {
-            static const uint16_t BARS[4] = {1, 2, 4, 8};
-            int b = 0;
-            while (b < 3 && BARS[b] < *d[i].v)
-                b++;
-            *d[i].v = BARS[clamp(b + (e > 0 ? 1 : -1), 0, 3)];
-        } else {
-            v = clamp((int32_t)*d[i].v + e * (glo && d[i].step > 1 ? 2 : d[i].step), d[i].lo, d[i].hi);
-            *d[i].v = (uint16_t)v;
-        }
-        ui.turned_at[i] = now;
-        changed();
-    }
-    if (keys != ui.keys)
-        ui.top_dirty = 1;
-    ui.keys = keys;
-    ui.btn = btn;
-}
-
-void app_input_only(void) { input(); }
-
-/* ---------------------------------------------------------------- drawing --- */
-static void disc(int32_t cx, int32_t cy, int32_t r, uint16_t c)
-{
-    int32_t y;
-    for (y = -r; y <= r; y++) {
-        int32_t w = (int32_t)fm_sqrtf((float)(r * r - y * y));
-        cv_rect(cx - w, cy + y, 2 * w + 1, 1, c);
-    }
-}
-static void ring(int32_t cx, int32_t cy, int32_t r, uint16_t c)
-{
-    int i;
-    int32_t px = cx, py = cy - r;
-    for (i = 1; i <= 48; i++) {
-        float a = (float)i / 48.0f;
-        int32_t x = cx + (int32_t)(fm_sin_turns(a) * (float)r), y = cy - (int32_t)(fm_sin_turns(a + 0.25f) * (float)r);
-        cv_line(px, py, x, y, c);
-        px = x;
-        py = y;
-    }
-}
-static void arc(int32_t cx, int32_t cy, float r, float a0, float a1, uint16_t c, int thick)
-{                                         /* turns, 0 at the top, clockwise */
-    int n = (int)((a1 - a0) * 64.0f) + 1, i, k;
-    for (k = 0; k < thick; k++) {
-        float rr = r - (float)k;
-        int32_t px = cx + (int32_t)(fm_sin_turns(a0) * rr), py = cy - (int32_t)(fm_sin_turns(a0 + 0.25f) * rr);
-        for (i = 1; i <= n; i++) {
-            float a = a0 + (a1 - a0) * (float)i / (float)n;
-            int32_t x = cx + (int32_t)(fm_sin_turns(a) * rr), y = cy - (int32_t)(fm_sin_turns(a + 0.25f) * rr);
-            cv_line(px, py, x, y, c);
-            px = x;
-            py = y;
-        }
-    }
-}
-static void tline(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t c)   /* two pixels thick */
-{
-    cv_line(x0, y0, x1, y1, c);
-    cv_line(x0, y0 + 1, x1, y1 + 1, c);
-}
-static void ctext(int32_t cx, int32_t y, const felucca_font_t *f, const char *s, uint16_t c)
-{
-    cv_text(cx - text_w(f, s) / 2, y, f, s, c);
-}
-static float kv(int i)                   /* the current screen's knob i, 0..1 */
-{
-    dial_t d[4];
-    dials(d);
-    return d[i].v ? (float)(*d[i].v - d[i].lo) / (float)(d[i].hi - d[i].lo) : 0.0f;
-}
-static int lit(int i) { return ui.turned_at[i] && ui.now - ui.turned_at[i] < 700u; }
-static uint16_t kcol(int i) { return lit(i) ? KC[i] : mix565(KC[i], BG, 0.25f); }
-
-/* ---- SOUND pictures, y 20..142 ---- */
-static void pic_string(float tm)
-{
-    float act = fm_minf(VIEW.track_peak[cur_track] * 40.0f, 1.0f), damp = kv(0), tone = kv(1), pluck = kv(2),
-          drive = kv(3);
-    int32_t x0 = 24, x1 = 210, y = 82, i, px = x0, py = y, pu = x0 + (int32_t)((0.05f + 0.45f * pluck) * 186.0f);
-    for (i = 1; i <= 64; i++) {          /* the string, standing waves */
-        float u = (float)i / 64.0f, a = act * 26.0f;
-        float yy = a * fm_sin_turns(u * 0.5f) * fm_sin_turns(tm * 5.3f)
-                 + a * tone * 0.45f * fm_sin_turns(u) * fm_sin_turns(tm * 10.9f + 0.3f);
-        int32_t x = x0 + (int32_t)(u * (float)(x1 - x0)), yi = y + (int32_t)yy;
-        if (drive > 0.05f && (i & 1))
-            yi += (int32_t)(drive * 4.0f * act * (float)((i & 2) - 1));
-        tline(px, py, x, yi, drive > 0.05f ? mix565(K_WHITE, K_ORANGE, drive) : K_WHITE);
-        px = x;
-        py = yi;
-    }
-    cv_rect(14, y - 14, 10, 30, G2);     /* the bridge, the nut */
-    cv_rect(x1, y - 14, 10, 30, G2);
-    {                                    /* DAMP: the felt at the right end */
-        int32_t w = 6 + (int32_t)(damp * 26.0f), h = 8 + (int32_t)(damp * 18.0f);
-        cv_rect(x1 - w, y - h / 2 - 2, w, h, kcol(0));
-    }
-    for (i = 0; i < 2 + (int)(tone * 7.0f); i++) {   /* TONE: sparks at the pluck */
-        float a = (float)i / (2.0f + tone * 7.0f) * 0.5f - 0.25f, l = 8.0f + 10.0f * tone * (0.6f + 0.4f * fm_sin_turns(tm * 3.0f + (float)i));
-        cv_line(pu, y - 8, pu + (int32_t)(fm_sin_turns(a) * l), y - 8 - (int32_t)(fm_sin_turns(a + 0.25f) * l), kcol(1));
-    }
-    for (i = 0; i < 9; i++)              /* PLUCK: the pick under the string */
-        cv_rect(pu - i / 2, y + 12 + i, i + 1, 1, kcol(2));
-    if (drive > 0.05f)                   /* DRIVE: heat under the string */
-        for (i = 0; i < 6; i++)
-            cv_rect(40 + i * 28, 126 - (int32_t)(drive * 10.0f * (0.5f + 0.5f * fm_sin_turns(tm * 2.0f + (float)i * 0.3f))),
-                    16, 3, kcol(3));
-}
-
-static void pic_pulse(float tm)
-{
-    float pw = 0.5f + 0.45f * kv(0), sub = kv(1), cut = kv(2), res = kv(3);
-    int32_t i, px = 0, py = 0, x;
-    float scroll = VIEW.playing || VIEW.track_peak[cur_track] > 0.001f ? tm * 0.6f : 0.0f;
-    for (i = 0; i <= 200; i++) {         /* WIDTH: the pulse, its high part blue */
-        float ph = frac1((float)i / 66.0f + scroll);
-        int32_t y = ph < pw ? 30 : 64;
-        x = 20 + i;
-        if (i && y != py)
-            cv_line(x, 30, x, 64, K_WHITE);
-        cv_rect(x, y, 1, 2, y == 30 ? kcol(0) : K_WHITE);
-        px = x;
-        py = y;
-    }
-    for (i = 0; i <= 200; i++) {         /* SUB: an octave down, green */
-        float ph = frac1((float)i / 132.0f + scroll * 0.5f);
-        cv_rect(20 + i, ph < 0.5f ? 74 - (int32_t)(sub * 6.0f) : 80 + (int32_t)(sub * 6.0f), 1, 2, kcol(1));
-    }
-    (void)px;
-    {                                    /* CUTOFF and RESO: the filter's curve */
-        int32_t xc = 20 + (int32_t)(cut * 200.0f), lx = 20, ly = 112;
-        for (i = 0; i <= 200; i += 4) {
-            float d = ((float)(20 + i) - (float)xc) / 30.0f, y;
-            y = d < 0.0f ? 0.0f : d * d * 6.0f;
-            y -= res * 18.0f * fm_expf(-d * d * 4.0f);
-            if (y > 28.0f)
-                y = 28.0f;
-            x = 20 + i;
-            tline(lx, ly, x, 112 + (int32_t)y, i < (int32_t)(cut * 200.0f) + 20 ? kcol(2) : mix565(K_WHITE, BG, 0.6f));
-            lx = x;
-            ly = 112 + (int32_t)y;
-        }
-        disc(xc, 112 - (int32_t)(res * 18.0f), 3 + (int32_t)(res * 3.0f), kcol(3));
-    }
-}
-
-static void pic_fm(float tm)
-{
-    float ratio_k = kv(0), idx = kv(1), fb = kv(2), envk = kv(3), env = VIEW.env[cur_track];
-    static const float R[8] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 5.0f, 7.0f};
-    float r = R[(int)(ratio_k * 7.99f)], orbit = 18.0f + 40.0f * idx, ang = tm * (0.12f + 0.1f * r);
-    int32_t cx = 120, cy = 82, mx, my, i;
-    ring(cx, cy, (int32_t)orbit, kcol(1));                         /* INDEX: the orbit */
-    for (i = 1; i <= (int)(fb * 14.0f); i++) {                    /* FEEDBACK: the trail */
-        float a = ang - (float)i * 0.018f;
-        disc(cx + (int32_t)(fm_sin_turns(a) * orbit), cy - (int32_t)(fm_sin_turns(a + 0.25f) * orbit), 2,
-             mix565(kcol(2), BG, (float)i / 16.0f));
-    }
-    for (i = 1; i <= 10; i++) {                                    /* ENV: a comet tail while a note sounds */
-        float a = ang - (float)i * 0.03f, bright = envk * env * (1.0f - (float)i / 11.0f);
-        if (bright > 0.05f)
-            disc(cx + (int32_t)(fm_sin_turns(a) * (orbit + 4.0f)), cy - (int32_t)(fm_sin_turns(a + 0.25f) * (orbit + 4.0f)), 2,
-                 mix565(BG, K_ORANGE, bright));
-    }
-    disc(cx, cy, 12 + (int32_t)(env * 5.0f), K_WHITE);           /* the carrier */
-    mx = cx + (int32_t)(fm_sin_turns(ang) * orbit);
-    my = cy - (int32_t)(fm_sin_turns(ang + 0.25f) * orbit);
-    disc(mx, my, 7, kcol(0));                                      /* RATIO: the modulator, its speed */
-    {
-        static const char *const RN[8] = {"1/2", "1", "3/2", "2", "3", "4", "5", "7"};
-        cv_text(mx + 10, my - 6, &FONT_T, RN[(int)(ratio_k * 7.99f)], kcol(0));
-    }
-}
-
-static void pic_cluster(float tm)
-{
-    float spread = kv(0), shape = kv(1), cut = kv(2), drift = kv(3), act = fm_minf(VIEW.track_peak[cur_track] * 30.0f, 1.0f);
-    int32_t c, p;
-    disc(120, 82, 14 + (int32_t)(cut * 46.0f), mix565(BG, K_WHITE, 0.08f + 0.06f * cut));   /* CUTOFF: the haze */
-    for (c = 0; c < 5; c++)
-        for (p = 0; p < 7; p++) {
-            float sx = (float)(c - 2) * (8.0f + 30.0f * spread), ph = tm * (0.3f + 0.05f * (float)c) + (float)p / 7.0f,
-                  jx = drift * 6.0f * fm_sin_turns(tm * 1.7f + (float)(c * 7 + p) * 0.37f),
-                  jy = drift * 6.0f * fm_sin_turns(tm * 1.3f + (float)(c * 5 + p) * 0.29f);
-            int32_t x = 120 + (int32_t)(sx + jx), y = 82 + (int32_t)(fm_sin_turns(ph) * (18.0f + 22.0f * act) + jy);
-            uint16_t col = mix565(kcol(0), K_WHITE, (float)p / 10.0f);
-            if (shape > 0.5f)                                      /* SHAPE: round -> square */
-                cv_rect(x - 2, y - 2, 5, 5, mix565(col, kcol(1), shape));
-            else
-                disc(x, y, 2, mix565(col, kcol(1), shape));
-            if (drift > 0.3f && p == 0)                             /* DRIFT: orange strays */
-                disc(x + (int32_t)jx * 2, y + (int32_t)jy * 2, 1, kcol(3));
-        }
-}
-
-static void pic_drums(void)
-{
-    int i;
-    int sel = ui.sel_pad[cur_track];
-    for (i = 0; i < NPADS; i++) {        /* the pads, 4 x 3, lit when hit */
-        int32_t x = 8 + (i % 4) * 37, y = 22 + (i / 4) * 40;
-        float since = (float)(ui.now - ui.hit_at[cur_track][i]) * 0.001f, glow = since < 0.4f ? 1.0f - since / 0.4f : 0.0f;
-        uint16_t fill = mix565(G1, K_WHITE, glow * 0.85f);
-        int32_t bump = (int32_t)(glow * 3.0f);
-        cv_rect(x - bump, y - bump, 33 + 2 * bump, 34 + 2 * bump, fill);
-        if (i == sel) {
-            cv_rect(x - 2 - bump, y - 2 - bump, 37 + 2 * bump, 2, K_ORANGE);
-            cv_rect(x - 2 - bump, y + 34 + bump, 37 + 2 * bump, 2, K_ORANGE);
-        }
-        ctext(x + 16, y + 11, &FONT_T, PAD_NAME[i], glow > 0.5f ? BG : i == sel ? K_WHITE : G3);
-    }
-    {                                    /* the chosen pad: its sound as a picture */
-        const uint16_t *p = PJ.t[cur_track].pad[sel];
-        float pitch = (float)p[0] / 1023.0f, dec = (float)p[1] / 1023.0f, tone = (float)p[2] / 1023.0f,
-              lvl = (float)p[3] / 1023.0f;
-        int32_t x0 = 160, i2, lx = x0, ly = 0;
-        ctext(198, 22, &FONT_B, PAD_NAME[sel], K_WHITE);
-        cv_rect(160, 44, 4, 70, G1);                               /* PITCH: a blue column */
-        cv_rect(160, 44 + (int32_t)((1.0f - pitch) * 70.0f), 4, (int32_t)(pitch * 70.0f), kcol(0));
-        for (i2 = 0; i2 <= 60; i2 += 2) {                          /* DECAY: the green fall, LEVEL its height */
-            float t = (float)i2 / 60.0f, a = lvl * fm_expf(-t * 6.0f / (0.15f + dec)) * fm_sin_turns(t * (4.0f + pitch * 10.0f));
-            int32_t y = 80 - (int32_t)(a * 30.0f);
-            if (i2)
-                cv_line(lx, ly, x0 + 10 + i2, y, kcol(1));
-            lx = x0 + 10 + i2;
-            ly = y;
-        }
-        for (i2 = 0; i2 < (int)(tone * 24.0f); i2++)               /* TONE: white grit */
-            cv_rect(172 + (int32_t)((i2 * 37) % 56), 118 + (int32_t)((i2 * 13) % 10), 2, 2, kcol(2));
-        cv_rect(232, 44 + (int32_t)((1.0f - lvl) * 70.0f), 4, (int32_t)(lvl * 70.0f), kcol(3));   /* LEVEL */
-    }
-}
-
-/* ---- ENVELOPE: four segments in the four colours, the voice's level running along it ---- */
-static void pic_env(void)
-{
-    const track_t *t = &PJ.t[cur_track];
-    float a = (float)t->env[0] / 1023.0f, d = (float)t->env[1] / 1023.0f, s = (float)t->env[2] / 1023.0f,
-          r = (float)t->env[3] / 1023.0f, lv = VIEW.env[cur_track];
-    int32_t x0 = 14, yb = 134, yt = 30, xa = x0 + 6 + (int32_t)(a * 52.0f), xd = xa + 6 + (int32_t)(d * 52.0f),
-            ys = yb - (int32_t)(s * (float)(yb - yt)), xs = xd + 40, xr = xs + 6 + (int32_t)(r * 54.0f), i;
-    if (t->engine == ENG_DRUM) {
-        ctext(120, 64, &FONT_B, "DRUMS", G3);
-        ctext(120, 88, &FONT_XS, "each pad has its own decay", G2);
-        return;
-    }
-    for (i = x0; i < xr; i += 3) {       /* the area under, faint */
-        int32_t y = i < xa ? yb - (yb - yt) * (i - x0) / fm_maxf((float)(xa - x0), 1.0f)
-                  : i < xd ? yt + (ys - yt) * (i - xa) / fm_maxf((float)(xd - xa), 1.0f)
-                  : i < xs ? ys
-                           : ys + (yb - ys) * (i - xs) / fm_maxf((float)(xr - xs), 1.0f);
-        cv_rect(i, y, 1, yb - y, G1);
-    }
-    tline(x0, yb, xa, yt, kcol(0));
-    tline(xa, yt, xd, ys, kcol(1));
-    tline(xd, ys, xs, ys, kcol(2));
-    tline(xs, ys, xr, yb, kcol(3));
-    disc(xa, yt, 3, kcol(0));
-    disc(xd, ys, 3, kcol(1));
-    disc(xs, ys, 3, kcol(2));
-    disc(xr, yb, 3, kcol(3));
-    if (lv > 0.002f) {                   /* the newest voice's level, now */
-        int32_t y = yb - (int32_t)(lv * (float)(yb - yt));
-        cv_rect(x0, y, 226 - x0, 1, mix565(BG, K_WHITE, 0.5f));
-        disc(226, y, 4, K_WHITE);
-    }
-}
-
-/* ---- LFO: the wave in its target's colour, a dot riding it ---- */
-static void pic_lfo(void)
-{
-    const track_t *t = &PJ.t[cur_track];
-    int tg = t->lfo_target % TGT_N;
-    uint16_t col = tg < 4 ? KC[tg] : tg == TGT_PITCH ? RGB(200, 120, 255) : G3;
-    float depth = (float)t->lfo[1] / 1023.0f, fade = (float)t->lfo[2] / 1023.0f, ph = VIEW.lfo_ph[cur_track];
-    int32_t i, lx = 14, ly = 82, x, y, w = 168;
-    uint32_t seed = 7u;
-    float held = 0.2f;
-    for (i = 0; i <= w; i += 2) {        /* two cycles */
-        float u = (float)i / (float)w * 2.0f, p = frac1(u), v, f = fade > 0.01f ? fm_minf(u / (fade * 2.0f), 1.0f) : 1.0f;
-        if ((int)(u * 4.0f) != (int)((u - 2.0f / (float)w) * 4.0f)) {
-            seed = seed * 1103515245u + 12345u;
-            held = (float)((seed >> 16) & 255u) / 127.5f - 1.0f;
-        }
-        v = t->lfo_shape == LFO_TRI ? 1.0f - 4.0f * fm_fabsf(p - 0.5f) : t->lfo_shape == LFO_SQUARE ? (p < 0.5f ? 1.0f : -1.0f)
-          : t->lfo_shape == LFO_RANDOM ? held : fm_sin_turns(p);
-        x = 14 + i;
-        y = 82 - (int32_t)(v * f * (6.0f + 44.0f * depth));
-        if (i)
-            tline(lx, ly, x, y, mix565(col, BG, 0.15f));
-        lx = x;
-        ly = y;
-    }
-    if (fade > 0.01f)                    /* FADE IN: a white ramp under the start */
-        cv_line(14, 136, 14 + (int32_t)(fade * 2.0f * (float)w / 2.0f), 128, kcol(2));
-    {                                    /* the dot: where the LFO is now */
-        float v = VIEW.lfo[cur_track];
-        disc(14 + (int32_t)(ph * (float)w / 2.0f), 82 - (int32_t)(v * 50.0f), 5, K_WHITE);
-    }
-    {                                    /* TARGET: a little knob of its colour, an arrow to it */
-        cv_line(190, 82, 204, 82, col);
-        cv_line(200, 78, 204, 82, col);
-        cv_line(200, 86, 204, 82, col);
-        disc(218, 82, 12, col);
-        disc(218, 82, 5, BG);
-        ctext(218, 100, &FONT_T, TGT_NAME[tg], col);
-        ctext(60, 24, &FONT_T, LFO_NAME[t->lfo_shape % LFO_SHAPES], G3);
-    }
-}
-
-/* ---- EFFECT ---- */
-static void pic_fx(void)
-{
-    const track_t *t = &PJ.t[cur_track];
-    int32_t i, lx = 20, ly = 82, x, y;
-    if (t->fx_type == FX_OFF) {
-        cv_rect(20, 82, 200, 2, G2);
-        ctext(120, 96, &FONT_XS, "SELECT: drive, crush, filter", G2);
-        return;
-    }
-    {
-        const uint16_t *f = t->fx[t->fx_type - 1];
-        float a = (float)f[0] / 1023.0f, b = (float)f[1] / 1023.0f, c = (float)f[2] / 1023.0f, mix = (float)f[3] / 1023.0f;
-        for (i = 0; i <= 180; i += 2) {
-            float u = (float)i / 180.0f, s = fm_sin_turns(u * 2.0f), o = s;
-            if (t->fx_type == FX_DRIVE) {
-                float g = 1.0f + 24.0f * a * a;
-                o = fm_tanhf(s * g + 0.4f * c) - fm_tanhf(0.4f * c);
-            } else if (t->fx_type == FX_CRUSH) {
-                float q = fm_exp2f(1.0f + (1.0f - a) * 5.0f), step = 1.0f + b * 20.0f, uu = fm_floorf(u * 180.0f / step) * step / 180.0f;
-                o = fm_floorf(fm_sin_turns(uu * 2.0f) * q + 0.5f) / q;
-                o = o + (fm_sin_turns(0.25f * o * (1.0f + 4.0f * c)) - o) * c;
-            } else {
-                o = s * (1.0f / (1.0f + fm_expf((u - a) * 14.0f)));   /* a picture of a sweep */
-            }
-            o = s + (o - s) * mix;
-            x = 20 + i;
-            cv_rect(x, 82 - (int32_t)(s * 42.0f), 1, 1, G2);       /* the dry wave, faint */
-            y = 82 - (int32_t)(fm_clampf(o, -1.1f, 1.1f) * 42.0f);
-            if (i)
-                tline(lx, ly, x, y, K_WHITE);
-            lx = x;
-            ly = y;
-        }
-        if (t->fx_type == FX_DRIVE) {    /* DRIVE: the walls the wave hits; BIAS: their shift */
-            int32_t wall = 40 - (int32_t)(a * 30.0f), off = (int32_t)(c * 10.0f);
-            cv_rect(20, 82 - wall - off, 180, 1, kcol(0));
-            cv_rect(20, 82 + wall - off, 180, 1, kcol(0));
-            cv_rect(20, 136, (int32_t)(b * 180.0f), 3, kcol(1));     /* TONE */
-            cv_rect(20, 26, (int32_t)(c * 180.0f), 2, kcol(2));
-        } else if (t->fx_type == FX_CRUSH) {
-            for (i = 0; i < 5; i++)
-                cv_rect(20 + i * 36, 132, 4 + (int32_t)(b * 26.0f), 4, kcol(1));   /* RATE: the hold width */
-            cv_rect(20, 26, (int32_t)(a * 180.0f), 2, kcol(0));                  /* BITS */
-            cv_rect(20, 30, (int32_t)(c * 180.0f), 2, kcol(2));                  /* FOLD */
-        } else {
-            int32_t xc = 20 + (int32_t)(a * 180.0f);
-            cv_rect(xc, 30, 2, 104, kcol(0));                                     /* CUTOFF */
-            disc(xc, 40 - (int32_t)(b * 8.0f), 3 + (int32_t)(b * 4.0f), kcol(1));   /* RESO */
-            if (c > 0.01f)                                                         /* SWEEP */
-                for (i = -1; i <= 1; i += 2)
-                    cv_line(xc + i * 8, 120, xc + i * (8 + (int32_t)(c * 20.0f)), 120, kcol(2));
-        }
-        cv_rect(210, 134 - (int32_t)(mix * 100.0f), 10, (int32_t)(mix * 100.0f), kcol(3));   /* MIX */
-        cv_rect(210, 34, 10, 1, G2);
-    }
-}
-
-/* ---- TAPE: two reels, the tape between them, four lanes scrolling under the head ---- */
-static void reel(int32_t cx, int32_t cy, float pack, float ang)
-{
-    int i;
-    disc(cx, cy, 14 + (int32_t)(pack * 18.0f), RGB(52, 40, 34));   /* the tape wound on it */
-    ring(cx, cy, 33, G2);
-    disc(cx, cy, 7, G3);
-    for (i = 0; i < 3; i++) {            /* three spokes, turning */
-        float a = ang + (float)i / 3.0f;
-        tline(cx + (int32_t)(fm_sin_turns(a) * 8.0f), cy - (int32_t)(fm_sin_turns(a + 0.25f) * 8.0f),
-              cx + (int32_t)(fm_sin_turns(a) * 13.0f), cy - (int32_t)(fm_sin_turns(a + 0.25f) * 13.0f), K_WHITE);
-    }
-}
-
-static void pic_tape(void)
-{
-    float len = (float)(PJ.loop_bars * 4u * PPQ), pos = VIEW.tape_pos, u = len > 0.0f ? pos / len : 0.0f;
-    int t, i;
-    reel(58, 52, 1.0f - u, -VIEW.reel * 1.3f);
-    reel(182, 52, u, -VIEW.reel);
-    cv_line(58 - 30, 64, 112, 92, G3);   /* the tape's path past the head */
-    cv_line(182 + 30, 64, 128, 92, G3);
-    cv_rect(112, 90, 16, 6, VIEW.recording ? REDC : G3);
-    for (t = 0; t < NTRACKS; t++) {      /* the lanes: a loop's worth, the head in the middle */
-        int32_t y = 102 + t * 10, n = tr.t.n[t];
-        int here = t == cur_track;
-        cv_rect(10, y, 220, 8, here ? (ui.rec_armed ? RGB(60, 16, 22) : G1) : BG);
-        for (i = 0; i < (int)PJ.loop_bars; i++) {   /* bar lines */
-            float bu = frac1((float)(i * 4 * PPQ) / len - u + 0.5f) - 0.5f;
-            cv_rect(120 + (int32_t)(bu * 220.0f), y, 1, 8, G2);
-        }
-        for (i = 0; i < n && i < TAPE_MAX; i++) {
-            uint32_t e = tr.t.ev[t][i];
-            if (e >> 23 & 1u) {
-                float eu = frac1((float)(e & 0xFFFFu) / len - u + 0.5f) - 0.5f;
-                int32_t x = 120 + (int32_t)(eu * 220.0f), ny = y + 6 - (int32_t)(((e >> 16) & 0x7Fu) % 12u) / 2;
-                cv_rect(x - 1, ny, 3, 2, here ? KC[t] : mix565(KC[t], BG, 0.5f));
-            }
-        }
-    }
-    cv_rect(120, 98, 1, 44, VIEW.recording ? REDC : K_WHITE);   /* the head */
-}
-
-/* ---- MIXER: four faders in the four colours, meters beside them; the master's spring and echoes ---- */
-static void pic_mix(float tm)
-{
-    int i;
-    if (!ui.mix_master) {
-        for (i = 0; i < NTRACKS; i++) {
-            const track_t *t = &PJ.t[i];
-            int32_t x = 22 + i * 54, top = 30, h = 96, lv = (int32_t)((float)t->level / 1023.0f * (float)h),
-                    mtr = (int32_t)(fm_minf(VIEW.track_peak[i] * 3.0f, 1.0f) * (float)h);
-            cv_rect(x, top, 22, h, G1);
-            cv_rect(x, top + h - lv, 22, lv, t->mute ? G2 : kcol(i));
-            cv_rect(x + 26, top + h - mtr, 4, mtr, mtr > h * 9 / 10 ? REDC : K_WHITE);
-            disc(x + 11 + (int32_t)(((float)t->pan - 512.0f) / 512.0f * 11.0f), top - 6, 3, ui.glo ? KC[i] : G2);
-            ctext(x + 11, top + h + 4, &FONT_T, ENG_NAME[t->engine % ENG_N], i == cur_track ? K_WHITE : G3);
-            if (t->mute)
-                ctext(x + 11, top + h / 2 - 6, &FONT_T, "M", BG);
-        }
+    const smp_head_t *h = (const smp_head_t *)(const void *)plat_data(SYN_BASE);
+    if (h && h->magic == SMP_MAGIC && h->len > 0 && h->len <= SYN_END - SYN_BASE - 256u) {
+        g_synth_sample.data = plat_data(SYN_BASE + 256u);
+        g_synth_sample.len = h->len;
     } else {
-        float rv = (float)PJ.rv_amt / 1023.0f, sz = (float)PJ.rv_size / 1023.0f, dl = (float)PJ.dl_amt / 1023.0f,
-              fb = (float)PJ.dl_fb / 1023.0f, wob = fm_minf(VIEW.out_peak * 3.0f, 1.0f);
-        int32_t lx = 14, ly = 82, x, y;
-        for (i = 0; i <= 96; i++) {      /* the spring: SIZE its coils, REVERB its brightness */
-            float u = (float)i / 96.0f;
-            x = 14 + i;
-            y = 82 + (int32_t)(fm_sin_turns(u * (3.0f + sz * 9.0f) + tm * wob) * (10.0f + 8.0f * rv));
-            if (i)
-                tline(lx, ly, x, y, mix565(kcol(1), kcol(0), rv));
-            lx = x;
-            ly = y;
-        }
-        {                                 /* the echoes: DELAY their light, FEEDBACK how many */
-            int n = 1 + (int)(fb * 7.0f), k;
-            float beat = frac1((float)VIEW.tape_pos / (float)PPQ);
-            for (k = 0; k < n; k++) {
-                float g = dl * fm_powf(0.82f, (float)k) * (k == 0 ? 1.0f : fb + 0.2f);
-                int32_t r = 5 + (int32_t)(g * 10.0f) + (k == 0 && VIEW.playing ? (int32_t)((1.0f - beat) * 4.0f) : 0);
-                disc(136 + k * 14, 82, r, mix565(BG, k == 0 ? kcol(2) : kcol(3), fm_minf(g * 1.6f + 0.35f, 1.0f)));
+        g_synth_sample.data = FACTORY_SYNTH;
+        g_synth_sample.len = sizeof FACTORY_SYNTH;
+    }
+    h = (const smp_head_t *)(const void *)plat_data(DRM_BASE);
+    if (h && h->magic == SMP_MAGIC && h->len > 0 && h->len <= DRM_END - DRM_BASE - 256u) {
+        g_drum_sample.data = plat_data(DRM_BASE + 256u);
+        g_drum_sample.len = h->len;
+    } else {
+        g_drum_sample.data = FACTORY_DRUM;
+        g_drum_sample.len = sizeof FACTORY_DRUM;
+    }
+}
+
+/* ------------------------------------------------------------ the sampler --- */
+/* OP-1 style: on a sampler sound, REC prepares (the region erased: the sound stops a moment), then a held key
+ * records the master output until it is let go (or the region is full) */
+enum { SM_OFF, SM_ERASING, SM_READY, SM_REC };
+static struct {
+    uint8_t state, kind, key;
+    uint32_t base, end, next_erase, wr, len, page_n, done_at;
+    uint8_t page[256];
+} smp;
+
+static void sampler_arm(int kind)
+{
+    smp.kind = (uint8_t)kind;
+    smp.base = kind ? DRM_BASE : SYN_BASE;
+    smp.end = kind ? DRM_END : SYN_END;
+    smp.next_erase = smp.base;
+    smp.state = SM_ERASING;
+    if (kind) {                          /* the region is going: the factory sample meanwhile */
+        g_drum_sample.data = FACTORY_DRUM;
+        g_drum_sample.len = sizeof FACTORY_DRUM;
+    } else {
+        g_synth_sample.data = FACTORY_SYNTH;
+        g_synth_sample.len = sizeof FACTORY_SYNTH;
+    }
+}
+
+static void sampler_finish(void)
+{
+    smp_head_t h;
+    if (smp.page_n) {
+        uint32_t k;
+        for (k = smp.page_n; k < 256u; k++)
+            smp.page[k] = 0xFF;
+        plat_data_write(smp.wr, smp.page, 256);
+        smp.page_n = 0;
+    }
+    h.magic = SMP_MAGIC;
+    h.len = smp.len;
+    h.rate = 22050;
+    h.rsv = 0;
+    if (smp.len > 2205u)                 /* a tenth of a second at least */
+        plat_data_write(smp.base, &h, sizeof h);
+    samples_point();
+    smp.state = SM_OFF;
+    smp.done_at = plat_ms();
+}
+
+static void sampler_drain(void)
+{
+    uint8_t buf[512];
+    uint32_t n, k;
+    while ((n = core_sample_take(buf, sizeof buf)) > 0)
+        for (k = 0; k < n && smp.wr + 256u <= smp.end; k++) {
+            smp.page[smp.page_n++] = buf[k];
+            smp.len++;
+            if (smp.page_n == 256u) {
+                plat_data_write(smp.wr, smp.page, 256);
+                smp.wr += 256u;
+                smp.page_n = 0;
             }
-            ctext(176, 112, &FONT_T, DIV_NAME[PJ.dl_div % DIV_N], G3);
         }
-        ctext(62, 112, &FONT_T, "SPRING", G3);
+}
+
+static void sampler_service(void)        /* every frame */
+{
+    if (smp.state == SM_ERASING) {       /* a few sectors a frame: the screen shows the progress */
+        int k;
+        for (k = 0; k < 4 && smp.next_erase < smp.end; k++, smp.next_erase += 4096u)
+            plat_data_erase(smp.next_erase);
+        if (smp.next_erase >= smp.end) {
+            smp.state = SM_READY;
+            smp.wr = smp.base + 256u;
+            smp.len = 0;
+            smp.page_n = 0;
+            core_sample_arm(smp.kind);
+        }
+    } else if (smp.state == SM_REC) {
+        sampler_drain();
+        if (smp.wr + 256u > smp.end) {   /* full */
+            core_sample_go(0);
+            sampler_finish();
+        }
     }
 }
 
-static void draw_top(void)
-{
-    float tm = (float)ui.now * 0.001f;
-    int i;
-    char n[12];
-    cv_begin(240, 144, BG);
-    {                                    /* the header: the screen, the tracks, the tape */
-        const char *name = ui.screen == S_MIX && ui.mix_master ? "MASTER"
-                         : ui.screen == S_SOUND ? ENG_NAME[PJ.t[cur_track].engine % ENG_N] : SCREEN_NAME[ui.screen];
-        cv_text(8, 3, &FONT_XS, name, K_WHITE);
-        for (i = 0; i < NTRACKS; i++) {
-            int32_t x = 110 + i * 18;
-            float act = fm_minf(VIEW.track_peak[i] * 30.0f, 1.0f);
-            n[0] = (char)('1' + i);
-            n[1] = 0;
-            if (i == cur_track)
-                cv_rect(x - 1, 3, 14, 13, K_WHITE);
-            else
-                cv_rect(x - 1, 3, 14, 13, mix565(G1, KC[i], act * 0.7f));
-            ctext(x + 6, 3, &FONT_T, n, i == cur_track ? BG : G3);
-        }
-        if (VIEW.playing) {              /* play: a triangle; record: a red dot, blinking while it records */
-            for (i = 0; i < 9; i++)
-                cv_rect(196 + i / 2, 5 + i / 2, 1, 9 - (i / 2) * 2, RGB(70, 220, 120));
-        } else {
-            cv_rect(196, 5, 8, 9, G2);
-        }
-        if (ui.rec_armed && (!VIEW.recording || (ui.now / 250u) & 1u))
-            disc(212, 9, 4, REDC);
-        num_text(PJ.tempo, n);
-        cv_text(234 - text_w(&FONT_T, n), 4, &FONT_T, n, G3);
-    }
-    switch (ui.screen) {
-    case S_SOUND:
-        switch (PJ.t[cur_track].engine) {
-        case ENG_STRING: pic_string(tm); break;
-        case ENG_PULSE: pic_pulse(tm); break;
-        case ENG_FM: pic_fm(tm); break;
-        case ENG_CLUSTER: pic_cluster(tm); break;
-        default: pic_drums(); break;
-        }
-        break;
-    case S_ENV: pic_env(); break;
-    case S_LFO: pic_lfo(); break;
-    case S_FX: pic_fx(); break;
-    case S_TAPE: pic_tape(); break;
-    default: pic_mix(tm); break;
-    }
-    if (ui.now < ui.toast_until) {       /* a toast: a small pill under the header, the picture stays in view */
-        int32_t w = text_w(&FONT_XS, ui.toast[0]) + (ui.toast[1][0] ? 8 + text_w(&FONT_XS, ui.toast[1]) : 0) + 16, x,
-                left = (int32_t)(ui.toast_until - ui.now);
-        int32_t y = left > 1000 ? 20 - (int32_t)(left - 1000) / 10 : 20;     /* it drops in */
-        cv_rect(120 - w / 2, y, w, 17, G1);
-        cv_rect(120 - w / 2, y + 16, w, 1, K_ORANGE);
-        x = cv_text(120 - w / 2 + 8, y + 1, &FONT_XS, ui.toast[0], K_WHITE);
-        cv_text(x + 8, y + 1, &FONT_XS, ui.toast[1], K_ORANGE);
-    }
-    cv_blit(0, 0);
-}
-
-static void draw_bottom(void)
-{
-    dial_t d[4];
-    int i;
-    char t[16];
-    dials(d);
-    cv_begin(240, 96, BG);
-    cv_rect(0, 0, 240, 1, G1);
-    for (i = 0; i < 4; i++) {            /* four knobs, their colours, their values */
-        int32_t cx = 30 + i * 60, cy = 30;
-        float v;
-        if (!d[i].v) {
-            disc(cx, cy, 3, G1);
-            continue;
-        }
-        v = (float)(*d[i].v - d[i].lo) / (float)(d[i].hi - d[i].lo);
-        arc(cx, cy, 20.0f, -0.375f, 0.375f, KD[i], 3);
-        arc(cx, cy, 20.0f, -0.375f, -0.375f + 0.75f * v, KC[i], lit(i) ? 5 : 3);
-        tline(cx, cy, cx + (int32_t)(fm_sin_turns(-0.375f + 0.75f * v) * 12.0f),
-              cy - (int32_t)(fm_sin_turns(-0.375f + 0.75f * v + 0.25f) * 12.0f), KC[i]);
-        disc(cx, cy, 3, KC[i]);
-        if (!ui.glo) {
-            ctext(cx, 56, &FONT_T, d[i].label, lit(i) ? K_WHITE : G3);
-            value_text(&d[i], t);
-            ctext(cx, 72, &FONT_XS, t, KC[i]);
-        } else {
-            value_text(&d[i], t);
-            ctext(cx, 56, &FONT_T, t, KC[i]);
-        }
-    }
-    if (ui.glo) {                        /* shift: what GLO does here */
-        const char *h = ui.screen == S_MIX && !ui.mix_master ? "GLO: knobs pan the tracks"
-                      : ui.screen == S_TAPE ? "GLO+PLAY reverse  GLO+REC hold: erase"
-                                            : "GLO: fine steps  GLO+PLAY reverse";
-        ctext(120, 76, &FONT_T, h, K_WHITE);
-    }
-    if (dirty)
-        disc(234, 90, 2, K_ORANGE);      /* unsaved */
-    cv_blit(0, 144);
-}
-
-/* the keys' and buttons' lights */
-static void lights(void)
-{
-    static const uint8_t SB[NSCREENS] = {B_EDIT, B_ENV, B_LFO, B_FX, B_SEQ, B_HOME};
-    uint32_t b = ui.btn | 1u << SB[ui.screen], k = ui.keys, i;
-    if (ui.playing)
-        b |= 1u << B_PLAY;
-    if (ui.rec_armed && (!VIEW.recording || (ui.now / 250u) & 1u))
-        b |= 1u << B_REC;
-    if (PJ.metro)
-        b |= 1u << B_ARP;
-    if (dirty)
-        b |= 1u << B_SAVE;
-    if (ui.screen == S_TAPE && VIEW.playing) {   /* the 16 white keys: where the loop is */
-        static const uint8_t WK[16] = PLAT_WHITE_KEYS;
-        float len = (float)(PJ.loop_bars * 4u * PPQ);
-        k |= 1u << WK[(int)(VIEW.tape_pos / len * 16.0f) & 15];
-    } else if (PJ.t[cur_track].engine == ENG_DRUM) {
-        for (i = 0; i < NKEYS; i++)       /* the pads: lit a moment after each hit */
-            if (ui.now - ui.hit_at[cur_track][i % NPADS] < 120u)
-                k |= 1u << i;
-    }
-    plat_glow(1);
-    plat_leds(b, k);
-}
-
-void app_ui_init(void)
-{
-    touch_on(1);
-    lcd_fill(0, 0, 240, 240, BG);
-    ui.top_dirty = ui.bottom_dirty = 1;
-}
-
-void app_frame(void)
-{
-    int t, p, alive;
-    ui.now = plat_ms();
-    input();
-    ann_tick(ui.now);
-    for (t = 0; t < NTRACKS; t++)        /* hits: when, and which pad the knobs now edit */
-        for (p = 0; p < NPADS; p++)
-            if (VIEW.pad_hits[t][p] != ui.hit_seen[t][p]) {
-                ui.hit_seen[t][p] = VIEW.pad_hits[t][p];
-                ui.hit_at[t][p] = ui.now;
-                if (ui.sel_pad[t] != p) {
-                    ui.sel_pad[t] = p;
-                    if (t == cur_track)
-                        ui.bottom_dirty = 1;
-                }
-            }
-    alive = VIEW.playing || VIEW.out_peak > 0.002f || ui.now < ui.toast_until + 100u;
-    for (t = 0; t < 4; t++)
-        if (lit(t) || (ui.turned_at[t] && ui.now - ui.turned_at[t] < 800u))
-            alive = 1, ui.bottom_dirty |= ui.now - ui.turned_at[t] > 700u && ui.now - ui.turned_at[t] < 800u;
-    VIEW.out_peak *= 0.8f;
-    /* the top moves at ~15 frames a second while anything does, ~4 when idle (it still breathes) */
-    if (ui.top_dirty || ui.now - ui.top_at >= (alive ? 66u : 250u)) {
-        ui.top_at = ui.now;
-        ui.top_dirty = 0;
-        draw_top();
-    }
-    if (ui.bottom_dirty) {
-        ui.bottom_dirty = 0;
-        draw_bottom();
-    }
-    lights();
-}
-
-#ifdef PLAT_HOST
-int app_expect(const char *what, int *got)
-{
-    if (!strcmp(what, "screen")) *got = ui.screen;
-    else if (!strcmp(what, "track")) *got = cur_track;
-    else if (!strcmp(what, "engine")) *got = PJ.t[cur_track].engine;
-    else if (!strcmp(what, "playing")) *got = VIEW.playing;
-    else if (!strcmp(what, "recording")) *got = VIEW.recording;
-    else if (!strcmp(what, "events")) *got = tr.t.n[cur_track];
-    else if (!strcmp(what, "tempo")) *got = PJ.tempo;
-    else if (!strcmp(what, "beat")) *got = (int)VIEW.beat;
-    else if (!strcmp(what, "speed_neg")) *got = PJ.speed < 512;
-    else if (!strcmp(what, "dirty")) *got = dirty;
-    else if (!strcmp(what, "loud")) *got = VIEW.out_peak > 0.01f;
-    else if (!strcmp(what, "pad")) *got = ui.sel_pad[cur_track];
-    else return 0;
-    return 1;
-}
-#endif
+#include "ui_screens.inc"
