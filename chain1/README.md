@@ -5,8 +5,8 @@
 DSP 全部自己寫，沒有使用 Korg 的程式碼、音色或素材；本專案與 Korg、M-VAVE 無關。授權 MPL-2.0。
 
 同一份原始碼編出：
-- `dist/chain-1-0.1.fwsc`：燒進 M-VAVE FM-1 實機（安裝識別碼 `FM-1_94000100`）
-- `dist/chain-1-0.1.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/chain-1-0.2.fwsc`：燒進 M-VAVE FM-1 實機（安裝識別碼 `FM-1_94000200`）
+- `dist/chain-1-0.2.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
 - `dist/chain-1-demo.mp3`：用 host 模擬器錄的 23 秒 demo（6 組出廠音色，包含琶音），聲音和實機是同一份 DSP
 
 | | | | |
@@ -93,9 +93,9 @@ app/tests/demo.txt    錄 demo
 
 ```sh
 ./build.sh --host && app/build/host/chain-1_host app/tests/basic.txt app/build/host
-./build.sh --release 0.1            # → app/build/chain-1-0.1.fwsc
-./build.sh --rfm1 --release 0.1     # → app/build/chain-1-0.1.rfm1（先 commit）
-node base/tests/rfm1_test.mjs app/build/chain-1-0.1.rfm1
+./build.sh --release 0.1            # → app/build/chain-1-0.2.fwsc
+./build.sh --rfm1 --release 0.1     # → app/build/chain-1-0.2.rfm1（先 commit）
+node base/tests/rfm1_test.mjs app/build/chain-1-0.2.rfm1
 ```
 
 ### 實測結果
@@ -114,5 +114,5 @@ node base/tests/rfm1_test.mjs app/build/chain-1-0.1.rfm1
 - 畫布上限是 240×144，所以分上下兩塊、各 120 列畫。
 
 ## 安裝
-- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/chain-1-0.1.rfm1`
-- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/chain-1-0.1.fwsc`
+- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/chain-1-0.2.rfm1`
+- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/chain-1-0.2.fwsc`
