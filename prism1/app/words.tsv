@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# PRISM-1's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://ghjob360-tmp.github.io/Tmp/prism1/words/
+PRISM-1	prism one
+OSC A	oscillator A
+OSC B	oscillator B
+FILTER	filter
+ENV 1 AMP	envelope 1, amplitude
+ENV 2	envelope 2
+ENV 3	envelope 3
+LFO 1	L F O 1
+LFO 2	L F O 2
+MATRIX	modulation matrix
+EFFECTS	effects
+VOICE	voice

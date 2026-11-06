@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "id": "prism-1",
+  "name": "prism1",
+  "author": "ghjob360",
+  "license": "GPL-3.0-only",
+  "tagline": "a six-voice wavetable synth in Vital's image: two wavetable oscillators, warps, spectral morphs, a mod matrix",
+  "description": "Six voices of two wavetable oscillators (six tables, eight frames each) with unison, Vital-style phase warps (sync, formant, quantize, bend, squeeze, pulse, FM, RM) and spectral morphs, noise, one filter (analog SVF, ladder, formant, comb) with Vital's low-band-high blend, three DAHDSR envelopes with Vital's curves, two LFOs, an eight-slot modulation matrix, and chorus, compressor, delay, distortion, flanger, phaser and reverb in Vital's order.",
+  "tags": ["synth"],
+  "install": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/prism1",
+  "site": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/prism1",
+  "source": "https://github.com/ghjob360-Tmp/Tmp",
+  "screenshot": "app/docs/screen.png",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["usb-audio-in", "usb-audio-out", "velocity", "pressure", "screen-reader"]
+  },
+  "credits": "after Vital by Matt Tytel (GPL-3.0): its oscillator warps, envelope curves and voice architecture, cut down for the FM-1; built on fm1-base (Charles Vestal) and felucca-bsp (Leo Kuroshita, Hugelton Instruments)"
+}

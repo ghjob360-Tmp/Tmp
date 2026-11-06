@@ -4,3 +4,6 @@
 [submodule "chain1/base"]
 	path = chain1/base
 	url = https://github.com/charlesvestal/fm1-base
+[submodule "prism1/base"]
+	path = prism1/base
+	url = https://github.com/charlesvestal/fm1-base

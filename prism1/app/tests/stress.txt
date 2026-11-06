@@ -1,0 +1,47 @@
+# the worst case: SUPERSAW (both oscillators 3-voice unison, spread: a stereo filter), the formant filter, every
+# effect on, six voices held; the host prints its render time (for a rough device estimate, see README)
+wait 800
+turn PRESET 1
+wait 60
+tap EDIT
+wait 30
+turn K1 2
+wait 30
+tap FX
+wait 30
+turn K1 1
+tap FX
+wait 30
+turn K1 1
+tap FX
+wait 30
+turn K1 2
+tap FX
+wait 30
+turn K1 1
+tap FX
+wait 30
+turn K1 1
+tap FX
+wait 30
+turn K1 1
+tap FX
+wait 30
+wait 300
+key 0 down 100
+key 4 down 100
+key 7 down 100
+key 11 down 100
+key 14 down 100
+key 16 down 100
+wait 200
+expect voices 6
+wait 10000
+expect voices 6
+expect loud 1
+key 0 up
+key 4 up
+key 7 up
+key 11 up
+key 14 up
+key 16 up

@@ -1,0 +1,20 @@
+# PRISM-1's build settings (base/tools/build.py)
+name = "PRISM-1"               # the build's files: prism-1.fwsc, prism-1-X.Y.rfm1, prism-1_host
+id_prefix = "FM-1_95"          # package identity: dev FM-1_9500, releases FM-1_95XXYYZZ
+usb_manufacturer = "prism1"
+usb_product = "PRISM-1 FM-1"
+o2 = ["synth.c", "wt.c"]       # the engine (from RAM: PLAT_RAM_CODE) and the wavetable builder, at -O2
+o2_cflags = ["-fno-builtin"]   # no memset / memcpy calls made up from loops (RAM code may not call the flash)
+words = "words.tsv"
+ble = false
+repo = "https://github.com/ghjob360-Tmp/Tmp"
+licence = "GPL-3.0-only"
+authors = ["ghjob360"]
+author = "ghjob360"
+credits = "after Vital by Matt Tytel (GPL-3.0): its oscillator warps, envelope curves and voice architecture, cut down for the FM-1; built on fm1-base (Charles Vestal) and felucca-bsp (Leo Kuroshita, Hugelton Instruments)"
+tagline = "a six-voice wavetable synth in Vital's image: two wavetable oscillators, warps, spectral morphs, a mod matrix"
+description = "Six voices of two wavetable oscillators (six tables, eight frames each) with unison, Vital-style phase warps (sync, formant, quantize, bend, squeeze, pulse, FM, RM) and spectral morphs, noise, one filter (analog SVF, ladder, formant, comb) with Vital's low-band-high blend, three DAHDSR envelopes with Vital's curves, two LFOs, an eight-slot modulation matrix, and chorus, compressor, delay, distortion, flanger, phaser and reverb in Vital's order."
+tags = ["synth"]
+install = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/prism1"
+site = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/prism1"
+screenshot = "app/docs/screen.png"
