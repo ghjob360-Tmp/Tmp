@@ -1,0 +1,285 @@
+# every TYPE of every section played once, recorded: tools/check_wav.py checks the recording
+wait 600
+wav types.wav
+tap EDIT
+wait 30
+turn PRESET -4
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn K1 60
+turn K2 60
+wait 30
+tap EDIT
+wait 30
+turn PRESET -4
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+tap SEL
+wait 30
+turn PRESET -7
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET -7
+wait 30
+tap ENV
+wait 30
+turn PRESET -5
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET -5
+wait 30
+tap FX
+wait 30
+turn K2 60
+wait 30
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET -4
+tap FX
+wait 30
+turn K2 80
+turn K3 60
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET -5
+tap FX
+wait 30
+turn K3 60
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+turn PRESET 1
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+tap SEL
+wait 30
+turn K2 200
+tap FX
+wait 30
+turn PRESET 1
+turn K2 200
+wait 30
+key 7 down
+wait 220
+expect loud 1
+key 7 up
+wait 120
+wait 2000
+expect loud 1
+wavstop

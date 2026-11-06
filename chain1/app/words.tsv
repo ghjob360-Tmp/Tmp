@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MPL-2.0
+# CHAIN-1's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://ghjob360-tmp.github.io/Tmp/chain1/words/
+CHAIN-1	chain one
+OSC	oscillator
+FILTER	filter
+EG	envelope
+MOD	modulation
+DELAY	delay
+REVERB	reverb
+ARP	arpeggiator
+VPM	phase modulation

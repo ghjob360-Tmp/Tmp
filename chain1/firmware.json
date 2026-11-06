@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "chain-1",
+  "name": "chain1",
+  "author": "ghjob360",
+  "license": "MPL-2.0",
+  "tagline": "a one-voice synth in a fixed chain: OSC, FILTER, EG, MOD, DELAY, REVERB, ARP",
+  "description": "One voice through a fixed chain - four oscillators (saw, triangle, square, 2-op phase modulation) with their own LFO, a 2/4-pole state-variable filter with a sweep, five envelope types with tremolo, chorus/ensemble/phaser/flanger, five delays, five reverbs and a ten-pattern arpeggiator. Its layout follows a well-known pocket synth's signal flow; the DSP is original.",
+  "tags": ["synth"],
+  "install": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/chain1",
+  "site": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/chain1",
+  "source": "https://github.com/ghjob360-Tmp/Tmp",
+  "screenshot": "app/docs/screen.png",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["usb-audio-in", "usb-audio-out", "screen-reader"]
+  }
+}
