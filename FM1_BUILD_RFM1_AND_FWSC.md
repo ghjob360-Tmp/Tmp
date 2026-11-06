@@ -1,7 +1,13 @@
 # 同一份程式碼編出兩種產物：RemoteFM1 用的 `.rfm1`（WebAssembly）＋ FM-1 實機可燒的 `.fwsc`
 
 > 調查日期：2026-11-06。這份是 `MVAVE_FM1_CUSTOM_FIRMWARE.md` 的續篇，專講「怎麼編」。
-> 來源是以下 repo 的文件與原始碼（2026-11-06 的 HEAD），我讀過但**沒有在這台機器上實際跑過編譯**（執行外部下載的 toolchain 被權限擋下），所以指令是照文件整理的，第一次跑時請對照原 repo。
+> 來源是以下 repo 的文件與原始碼（2026-11-06 的 HEAD）。
+> **2026-11-06 更新：§2–§4 的 fm1-base 流程已實測成功**（Linux x86-64，JieLi toolchain 20260730.1、AC79 SDK `d179b44`、emsdk 6.0.10）。實際範例和踩到的坑在 `fm1-hello/README.md`。補充幾點：
+> - SDK 只需要 3 個打包檔，可以用 `--filter=blob:none --sparse` 只抓 `cpu/wl82/tools/{uboot.boot,cfg_tool.bin,cfg/eq_cfg_hw.bin}`（gitee 的完整 clone 很容易斷線）。
+> - `words.tsv` 必須有一行 `# url: https://.../words/`，否則 build 會失敗。
+> - fm1-base 的畫布上限是 240×144，要畫全螢幕得分塊 `cv_begin`/`cv_blit`。
+> - `screenshot` 路徑是相對於 `app/` 的上一層；`firmware.json` 會由 build 改寫，要先 commit，`.rfm1` 的 source_url 才會準確。
+> §5（FM1VST 路線）仍然只照文件整理，沒有實測。
 > - `charlesvestal/fm1-base`（README、template/、tools/build.py）
 > - `Quixotic7/RemoteFM1`（README、docs/NATIVE-AUTHORS.md）
 > - `Quixotic7/RemoteFM1IOS` docs/RFM1-FORMAT.md
