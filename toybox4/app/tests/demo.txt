@@ -1,0 +1,100 @@
+# TOYBOX-4 1.0 demo: the demo tape, a line overdubbed on T3, the engine swapped under it, a tape break, backwards
+wait 800
+wav demo.wav
+tap PLAY
+wait 9600
+tap FX
+wait 30
+tap REC
+wait 30
+key 7 down 102
+wait 540
+key 7 up
+wait 60
+key 10 down 102
+wait 240
+key 10 up
+wait 60
+key 14 down 114
+wait 240
+key 14 up
+wait 60
+key 17 down 114
+wait 540
+key 17 up
+wait 60
+key 14 down 114
+wait 540
+key 14 up
+wait 60
+key 19 down 102
+wait 840
+key 19 up
+wait 60
+key 17 down 114
+wait 240
+key 17 up
+wait 60
+key 14 down 114
+wait 540
+key 14 up
+wait 60
+key 12 down 90
+wait 540
+key 12 up
+wait 60
+key 10 down 102
+wait 540
+key 10 up
+wait 60
+key 7 down 102
+wait 1140
+key 7 up
+wait 60
+key 14 down 114
+wait 540
+key 14 up
+wait 60
+key 10 down 102
+wait 540
+key 10 up
+wait 60
+key 7 down 102
+wait 1740
+key 7 up
+wait 60
+wait 0
+tap REC
+wait 9600
+tap EDIT
+wait 100
+turn SELECT 1
+wait 2400
+turn SELECT 1
+wait 200
+turn K2 6
+wait 2200
+turn K1 10
+wait 4800
+tap HOME
+wait 100
+press GLO
+key 6 down 100
+wait 2200
+key 6 up
+release GLO
+wait 3000
+press GLO
+key 7 down 100
+wait 40
+key 7 up
+release GLO
+wait 6000
+press GLO
+key 7 down 100
+wait 40
+key 7 up
+release GLO
+wait 4000
+tap PLAY
+wait 1800

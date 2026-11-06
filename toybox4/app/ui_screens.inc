@@ -815,6 +815,11 @@ static void input(void)
         {
             int step = d[i].fmt == F_NAMES ? (int)(1024 / (d[i].n ? d[i].n : 1)) : d[i].fmt == F_ONOFF ? 1023
                      : d[i].fmt == F_RANGE ? (int)(1023 / (d[i].hi - d[i].lo)) + 1 : glo ? 2 : 8;
+            static uint32_t turn_at[4];  /* acceleration: a fast spin covers the range in ~a turn */
+            uint32_t dt = now - turn_at[i];
+            turn_at[i] = now;
+            if (step == 8 && (e > 1 || e < -1 || dt < 30u))
+                step = dt < 15u ? 32 : 20;
             int32_t v = clamp((int32_t)*d[i].v + e * step, 0, 1023);
             *d[i].v = (uint16_t)v;
         }
