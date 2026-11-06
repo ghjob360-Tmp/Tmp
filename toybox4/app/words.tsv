@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
+# TOYBOX-4's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://ghjob360-tmp.github.io/Tmp/toybox4/words/
+TOYBOX-4	toybox four
+SOUND	sound
+ENVELOPE	envelope
+LFO	L F O
+EFFECT	effect
+TAPE	tape
+MIXER	mixer
+MASTER	master

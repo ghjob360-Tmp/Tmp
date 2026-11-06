@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "id": "toybox-4",
+  "name": "toybox4",
+  "author": "ghjob360",
+  "license": "MPL-2.0",
+  "tagline": "a four-track pocket studio with colour-coded knobs and moving pictures",
+  "description": "Four tracks, each a string, pulse, FM or cluster synth or a twelve-pad drum kit, with an envelope, an LFO aimed at a knob, an effect, and a four-track event tape that plays at any speed, backwards too, and records over itself. Every screen is a picture that moves with the sound, drawn in the four knobs' colours.",
+  "tags": ["synth", "groovebox"],
+  "install": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/toybox4",
+  "site": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/toybox4",
+  "source": "https://github.com/ghjob360-Tmp/Tmp",
+  "screenshot": "app/docs/screen.png",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["usb-audio-in", "usb-audio-out", "velocity", "pressure", "screen-reader"]
+  },
+  "credits": "built on fm1-base (Charles Vestal) and felucca-bsp (Leo Kuroshita, Hugelton Instruments)"
+}

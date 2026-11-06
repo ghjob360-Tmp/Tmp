@@ -1,0 +1,146 @@
+# TOYBOX-4 in the host simulator: ./build.sh --host, then
+#   app/build/host/toybox-4_host app/tests/basic.txt app/build/host
+wait 800
+expect screen 0
+expect track 0
+expect engine 4
+shot boot.png
+# T1 is the drums: a key is a pad
+key 0 down 110
+wait 60
+expect loud 1
+expect pad 0
+key 0 up
+key 1 down 100
+wait 120
+expect pad 1
+shot drums.png
+key 1 up
+# the demo tape plays
+tap PLAY
+wait 1500
+expect playing 1
+expect loud 1
+tap SEQ
+wait 300
+expect screen 4
+shot tape.png
+# T3 (the string) recorded over the loop
+tap SEL
+wait 30
+tap SEL
+wait 50
+expect track 2
+expect events 0
+tap REC
+wait 50
+expect recording 1
+key 7 down 100
+wait 200
+key 7 up
+key 11 down 100
+wait 200
+key 11 up
+wait 100
+expect events 4
+shot recording.png
+tap REC
+wait 50
+expect recording 0
+tap EDIT
+wait 200
+expect engine 0
+key 7 down 100
+wait 150
+shot string.png
+key 7 up
+# the four engines' pictures, on T3
+turn SELECT 1
+wait 300
+key 12 down 100
+wait 150
+shot pulse.png
+key 12 up
+turn SELECT 1
+wait 300
+key 12 down 100
+wait 300
+shot fm.png
+key 12 up
+turn SELECT 1
+wait 300
+key 12 down 100
+wait 300
+shot cluster.png
+key 12 up
+turn SELECT 2
+wait 100
+expect engine 0
+# envelope, lfo, effect
+tap ENV
+wait 50
+turn K1 4
+wait 60
+key 7 down 100
+wait 300
+shot env.png
+key 7 up
+tap LFO
+wait 50
+turn K2 30
+turn K4 1
+wait 300
+shot lfo.png
+tap FX
+wait 50
+expect screen 3
+shot fx.png
+# the mixer, then the master
+tap HOME
+wait 300
+expect screen 5
+shot mixer.png
+tap HOME
+wait 300
+shot master.png
+# the tape backwards, then forwards again
+tap SEQ
+press GLO
+tap PLAY
+release GLO
+wait 600
+expect speed_neg 1
+shot backwards.png
+press GLO
+tap PLAY
+release GLO
+wait 100
+expect speed_neg 0
+# tempo, then stop
+turn ALGO 8
+wait 50
+expect tempo 120
+tap PLAY
+wait 100
+expect playing 0
+# save and reboot: the recording is kept
+tap SAVE
+wait 50
+expect dirty 0
+reboot
+wait 800
+tap SEL
+wait 30
+tap SEL
+wait 50
+expect track 2
+expect events 4
+expect tempo 120
+# erase: GLO + REC held
+press GLO
+press REC
+wait 900
+release REC
+release GLO
+wait 50
+expect events 0

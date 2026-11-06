@@ -1,0 +1,20 @@
+# TOYBOX-4's build settings (base/tools/build.py)
+name = "TOYBOX-4"
+id_prefix = "FM-1_96"          # package identity: dev FM-1_9600, releases FM-1_96XXYYZZ
+usb_manufacturer = "toybox4"
+usb_product = "TOYBOX-4 FM-1"
+o2 = ["engine.c"]              # the engine at -O2, running from RAM (PLAT_RAM_CODE)
+o2_cflags = ["-fno-builtin"]
+words = "words.tsv"
+ble = false
+repo = "https://github.com/ghjob360-Tmp/Tmp"
+licence = "MPL-2.0"
+authors = ["ghjob360"]
+author = "ghjob360"
+credits = "built on fm1-base (Charles Vestal) and felucca-bsp (Leo Kuroshita, Hugelton Instruments)"
+tagline = "a four-track pocket studio with colour-coded knobs and moving pictures"
+description = "Four tracks, each a string, pulse, FM or cluster synth or a twelve-pad drum kit, with an envelope, an LFO aimed at a knob, an effect, and a four-track event tape that plays at any speed, backwards too, and records over itself. Every screen is a picture that moves with the sound, drawn in the four knobs' colours."
+tags = ["synth", "groovebox"]
+install = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/toybox4"
+site = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/toybox4"
+screenshot = "app/docs/screen.png"

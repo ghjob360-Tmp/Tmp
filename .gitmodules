@@ -7,3 +7,6 @@
 [submodule "prism1/base"]
 	path = prism1/base
 	url = https://github.com/charlesvestal/fm1-base
+[submodule "toybox4/base"]
+	path = toybox4/base
+	url = https://github.com/charlesvestal/fm1-base
