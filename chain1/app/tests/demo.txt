@@ -1,0 +1,113 @@
+# a demo: each factory sound in turn (ALGORITHM), a few notes each; the arpeggiator on the ARP VPM sound
+wait 600
+wav demo.wav
+key 7 down
+wait 300
+key 7 up
+wait 60
+key 11 down
+wait 300
+key 11 up
+wait 60
+key 14 down
+wait 300
+key 14 up
+wait 60
+key 19 down
+wait 600
+key 19 up
+wait 60
+wait 900
+turn ALGO 1
+wait 40
+key 7 down
+wait 300
+key 7 up
+wait 60
+key 11 down
+wait 300
+key 11 up
+wait 60
+key 14 down
+wait 300
+key 14 up
+wait 60
+key 19 down
+wait 600
+key 19 up
+wait 60
+wait 900
+turn ALGO 1
+wait 40
+key 7 down
+wait 300
+key 7 up
+wait 60
+key 11 down
+wait 300
+key 11 up
+wait 60
+key 14 down
+wait 300
+key 14 up
+wait 60
+key 19 down
+wait 600
+key 19 up
+wait 60
+wait 900
+turn ALGO 1
+wait 40
+key 7 down
+wait 300
+key 7 up
+wait 60
+key 11 down
+wait 300
+key 11 up
+wait 60
+key 14 down
+wait 300
+key 14 up
+wait 60
+key 19 down
+wait 600
+key 19 up
+wait 60
+wait 900
+turn ALGO 1
+wait 40
+tap ARP
+wait 30
+key 7 down
+wait 2400
+key 7 up
+key 4 down
+wait 1600
+key 4 up
+tap ARP
+wait 300
+turn ALGO 1
+wait 40
+key 7 down
+wait 300
+key 7 up
+wait 60
+key 11 down
+wait 300
+key 11 up
+wait 60
+key 14 down
+wait 300
+key 14 up
+wait 60
+key 19 down
+wait 600
+key 19 up
+wait 60
+wait 900
+key 7 down
+wait 2500
+key 7 up
+wait 1500
+wavstop
