@@ -51,7 +51,7 @@ typedef struct {
 } tape_rec_t;
 static proj_rec_t pr;
 static tape_rec_t tr;
-#define P (pr.p)
+#define PJ (pr.p)                       /* (not P: host/rfm1.c has one) */
 static uint8_t dirty;
 
 
@@ -96,7 +96,7 @@ static void tape_add(int t, int tick, int note, int len, int vel)
     tape_t *tp = &tr.t;
     uint32_t on = (uint32_t)tick | (uint32_t)note << 16 | 1u << 23 | (uint32_t)vel << 24, off;
     int i, n = tp->n[t];
-    off = (uint32_t)((tick + len) % (int)(P.loop_bars * 4u * PPQ)) | (uint32_t)note << 16;
+    off = (uint32_t)((tick + len) % (int)(PJ.loop_bars * 4u * PPQ)) | (uint32_t)note << 16;
     for (int k = 0; k < (len > 0 ? 2 : 1); k++) {
         uint32_t e = k ? off : on;
         if (n >= TAPE_MAX)
@@ -117,30 +117,30 @@ static void project_defaults(void)
     for (w = 0; w < sizeof pr / 4u; w++)
         ((uint32_t *)(void *)&pr)[w] = 0;
     pr.magic = PROJ_MAGIC;
-    track_defaults(&P.t[0], ENG_DRUM);
-    track_defaults(&P.t[1], ENG_PULSE);
-    P.t[1].eng[ENG_PULSE][2] = 330;
-    P.t[1].env[1] = 380;
-    P.t[1].env[2] = 400;
-    P.t[1].env[3] = 150;
-    track_defaults(&P.t[2], ENG_STRING);
-    P.t[2].fx_type = FX_FILTER;
-    P.t[2].fx[FX_FILTER - 1][0] = 640;
-    P.t[2].fx[FX_FILTER - 1][2] = 120;
-    track_defaults(&P.t[3], ENG_FM);
-    P.t[3].lfo_target = TGT_K2;
-    P.t[3].lfo[1] = 300;
-    P.t[3].env[2] = 250;
-    P.t[3].env[3] = 520;
-    P.tempo = 112;
-    P.loop_bars = 2;
-    P.speed = 767;                       /* +1x */
-    P.metro = 0;
-    P.rv_amt = 260;
-    P.rv_size = 500;
-    P.dl_amt = 180;
-    P.dl_fb = 420;
-    P.dl_div = DIV_D8;
+    track_defaults(&PJ.t[0], ENG_DRUM);
+    track_defaults(&PJ.t[1], ENG_PULSE);
+    PJ.t[1].eng[ENG_PULSE][2] = 330;
+    PJ.t[1].env[1] = 380;
+    PJ.t[1].env[2] = 400;
+    PJ.t[1].env[3] = 150;
+    track_defaults(&PJ.t[2], ENG_STRING);
+    PJ.t[2].fx_type = FX_FILTER;
+    PJ.t[2].fx[FX_FILTER - 1][0] = 640;
+    PJ.t[2].fx[FX_FILTER - 1][2] = 120;
+    track_defaults(&PJ.t[3], ENG_FM);
+    PJ.t[3].lfo_target = TGT_K2;
+    PJ.t[3].lfo[1] = 300;
+    PJ.t[3].env[2] = 250;
+    PJ.t[3].env[3] = 520;
+    PJ.tempo = 112;
+    PJ.loop_bars = 2;
+    PJ.speed = 767;                       /* +1x */
+    PJ.metro = 0;
+    PJ.rv_amt = 260;
+    PJ.rv_size = 500;
+    PJ.dl_amt = 180;
+    PJ.dl_fb = 420;
+    PJ.dl_div = DIV_D8;
     /* a demo on the tape: a beat, a bass line, a bell (T3 is left for you) */
     tr.magic = TAPE_MAGIC;
     for (i = 0; i < NTRACKS; i++)
@@ -188,7 +188,7 @@ void app_init(void)
         || plat_store_load(OBJ_TAPE, &tr, sizeof tr) != (int)sizeof tr || tr.magic != TAPE_MAGIC)
         project_defaults();
     eng_init(&tr.t);
-    eng_project(&P);
+    eng_project(&PJ);
 }
 
 /* ---------------------------------------------------------------- the UI --- */
@@ -280,7 +280,7 @@ typedef struct {
 
 static void dials(dial_t d[4])
 {
-    track_t *t = &P.t[cur_track];
+    track_t *t = &PJ.t[cur_track];
     int i;
     for (i = 0; i < 4; i++) {
         d[i].label = 0;
@@ -336,15 +336,15 @@ static void dials(dial_t d[4])
         }
         break;
     case S_TAPE:
-        d[0].label = "SPEED"; d[0].v = &P.speed; d[0].fmt = V_SPEED; d[0].step = 8;
-        d[1].label = "BARS"; d[1].v = &P.loop_bars; d[1].fmt = V_BARS; d[1].lo = 1; d[1].hi = 8; d[1].step = 1;
-        d[2].label = "TEMPO"; d[2].v = &P.tempo; d[2].fmt = V_BPM; d[2].lo = 40; d[2].hi = 240; d[2].step = 1;
+        d[0].label = "SPEED"; d[0].v = &PJ.speed; d[0].fmt = V_SPEED; d[0].step = 8;
+        d[1].label = "BARS"; d[1].v = &PJ.loop_bars; d[1].fmt = V_BARS; d[1].lo = 1; d[1].hi = 8; d[1].step = 1;
+        d[2].label = "TEMPO"; d[2].v = &PJ.tempo; d[2].fmt = V_BPM; d[2].lo = 40; d[2].hi = 240; d[2].step = 1;
         d[3].label = "MUTE"; d[3].v = &t->mute; d[3].fmt = V_ONOFF; d[3].hi = 1; d[3].step = 1;
         break;
     case S_MIX:
         if (ui.mix_master) {
             static const char *const L[4] = {"REVERB", "SIZE", "DELAY", "FEEDBK"};
-            uint16_t *v[4] = {&P.rv_amt, &P.rv_size, &P.dl_amt, &P.dl_fb};
+            uint16_t *v[4] = {&PJ.rv_amt, &PJ.rv_size, &PJ.dl_amt, &PJ.dl_fb};
             for (i = 0; i < 4; i++) {
                 d[i].label = L[i];
                 d[i].v = v[i];
@@ -353,7 +353,7 @@ static void dials(dial_t d[4])
             static const char *const L[4] = {"T1", "T2", "T3", "T4"};
             for (i = 0; i < 4; i++) {
                 d[i].label = L[i];
-                d[i].v = ui.glo ? &P.t[i].pan : &P.t[i].level;
+                d[i].v = ui.glo ? &PJ.t[i].pan : &PJ.t[i].level;
                 d[i].fmt = ui.glo ? V_PAN : V_PCT;
             }
         }
@@ -432,7 +432,7 @@ static void changed(void)
     dirty = 1;
     ui.bottom_dirty = 1;
     ui.top_dirty = 1;
-    eng_project(&P);
+    eng_project(&PJ);
 }
 
 static void go(int s)
@@ -452,7 +452,7 @@ static void track_select(int t)
     char n[4] = {'T', (char)('1' + t), 0, 0};
     cur_track = t;
     ui.bottom_dirty = ui.top_dirty = 1;
-    app_say(n, ENG_NAME[P.t[t].engine % ENG_N]);
+    app_say(n, ENG_NAME[PJ.t[t].engine % ENG_N]);
 }
 
 /* --------------------------------------------------------------- input --- */
@@ -462,7 +462,7 @@ static void input(void)
     int i, glo = (int)((btn >> B_GLO) & 1u);
     int32_t e;
     dial_t d[4];
-    track_t *t = &P.t[cur_track];
+    track_t *t = &PJ.t[cur_track];
     touch_poll();
     keys = touch_keys();
     if (glo != ui.glo) {                 /* shift: the bottom shows the shift functions */
@@ -498,9 +498,9 @@ static void input(void)
         case B_SEL: track_select((cur_track + 1) % NTRACKS); break;
         case B_PLAY:
             if (glo) {                   /* the tape turned around */
-                P.speed = (uint16_t)(1024 - P.speed > 1023 ? 1023 : 1024 - P.speed);
+                PJ.speed = (uint16_t)(1024 - PJ.speed > 1023 ? 1023 : 1024 - PJ.speed);
                 changed();
-                app_say("TAPE", (int)P.speed < 512 ? "BACKWARDS" : "FORWARDS");
+                app_say("TAPE", (int)PJ.speed < 512 ? "BACKWARDS" : "FORWARDS");
             } else {
                 ui.playing ^= 1u;
                 eng_transport(ui.playing, ui.rec_armed);
@@ -517,9 +517,9 @@ static void input(void)
             }
             break;
         case B_ARP:
-            P.metro ^= 1u;
+            PJ.metro ^= 1u;
             changed();
-            app_say("METRONOME", P.metro ? "ON" : "OFF");
+            app_say("METRONOME", PJ.metro ? "ON" : "OFF");
             break;
         case B_SAVE:
             if (plat_store_save(OBJ_SETTINGS, &pr, sizeof pr) == 0 && plat_store_save(OBJ_TAPE, &tr, sizeof tr) == 0) {
@@ -553,9 +553,9 @@ static void input(void)
         track_select((cur_track + NTRACKS + (e > 0 ? 1 : -1)) % NTRACKS);
     if ((e = plat_enc(EN_ALGO)) != 0) {  /* the tempo, anywhere */
         char n[8];
-        P.tempo = (uint16_t)clamp((int32_t)P.tempo + e, 40, 240);
+        PJ.tempo = (uint16_t)clamp((int32_t)PJ.tempo + e, 40, 240);
         changed();
-        num_text(P.tempo, n);
+        num_text(PJ.tempo, n);
         app_say("TEMPO", n);
     }
     if ((e = plat_enc(EN_SELECT)) != 0) {   /* the screen's type */
@@ -577,14 +577,14 @@ static void input(void)
         case S_TAPE: {
             static const uint16_t BARS[4] = {1, 2, 4, 8};
             int b = 0;
-            while (b < 3 && BARS[b] < P.loop_bars)
+            while (b < 3 && BARS[b] < PJ.loop_bars)
                 b++;
-            P.loop_bars = BARS[clamp(b + dir, 0, 3)];
+            PJ.loop_bars = BARS[clamp(b + dir, 0, 3)];
             break;
         }
         case S_MIX:
-            P.dl_div = (uint16_t)((P.dl_div + DIV_N + (uint16_t)dir) % DIV_N);
-            app_say("DELAY", DIV_NAME[P.dl_div]);
+            PJ.dl_div = (uint16_t)((PJ.dl_div + DIV_N + (uint16_t)dir) % DIV_N);
+            app_say("DELAY", DIV_NAME[PJ.dl_div]);
             break;
         default: break;
         }
@@ -808,7 +808,7 @@ static void pic_drums(void)
         ctext(x + 16, y + 11, &FONT_T, PAD_NAME[i], glow > 0.5f ? BG : i == sel ? K_WHITE : G3);
     }
     {                                    /* the chosen pad: its sound as a picture */
-        const uint16_t *p = P.t[cur_track].pad[sel];
+        const uint16_t *p = PJ.t[cur_track].pad[sel];
         float pitch = (float)p[0] / 1023.0f, dec = (float)p[1] / 1023.0f, tone = (float)p[2] / 1023.0f,
               lvl = (float)p[3] / 1023.0f;
         int32_t x0 = 160, i2, lx = x0, ly = 0;
@@ -832,7 +832,7 @@ static void pic_drums(void)
 /* ---- ENVELOPE: four segments in the four colours, the voice's level running along it ---- */
 static void pic_env(void)
 {
-    const track_t *t = &P.t[cur_track];
+    const track_t *t = &PJ.t[cur_track];
     float a = (float)t->env[0] / 1023.0f, d = (float)t->env[1] / 1023.0f, s = (float)t->env[2] / 1023.0f,
           r = (float)t->env[3] / 1023.0f, lv = VIEW.env[cur_track];
     int32_t x0 = 14, yb = 134, yt = 30, xa = x0 + 6 + (int32_t)(a * 52.0f), xd = xa + 6 + (int32_t)(d * 52.0f),
@@ -867,7 +867,7 @@ static void pic_env(void)
 /* ---- LFO: the wave in its target's colour, a dot riding it ---- */
 static void pic_lfo(void)
 {
-    const track_t *t = &P.t[cur_track];
+    const track_t *t = &PJ.t[cur_track];
     int tg = t->lfo_target % TGT_N;
     uint16_t col = tg < 4 ? KC[tg] : tg == TGT_PITCH ? RGB(200, 120, 255) : G3;
     float depth = (float)t->lfo[1] / 1023.0f, fade = (float)t->lfo[2] / 1023.0f, ph = VIEW.lfo_ph[cur_track];
@@ -909,7 +909,7 @@ static void pic_lfo(void)
 /* ---- EFFECT ---- */
 static void pic_fx(void)
 {
-    const track_t *t = &P.t[cur_track];
+    const track_t *t = &PJ.t[cur_track];
     int32_t i, lx = 20, ly = 82, x, y;
     if (t->fx_type == FX_OFF) {
         cv_rect(20, 82, 200, 2, G2);
@@ -980,7 +980,7 @@ static void reel(int32_t cx, int32_t cy, float pack, float ang)
 
 static void pic_tape(void)
 {
-    float len = (float)(P.loop_bars * 4u * PPQ), pos = VIEW.tape_pos, u = len > 0.0f ? pos / len : 0.0f;
+    float len = (float)(PJ.loop_bars * 4u * PPQ), pos = VIEW.tape_pos, u = len > 0.0f ? pos / len : 0.0f;
     int t, i;
     reel(58, 52, 1.0f - u, -VIEW.reel * 1.3f);
     reel(182, 52, u, -VIEW.reel);
@@ -991,7 +991,7 @@ static void pic_tape(void)
         int32_t y = 102 + t * 10, n = tr.t.n[t];
         int here = t == cur_track;
         cv_rect(10, y, 220, 8, here ? (ui.rec_armed ? RGB(60, 16, 22) : G1) : BG);
-        for (i = 0; i < (int)P.loop_bars; i++) {   /* bar lines */
+        for (i = 0; i < (int)PJ.loop_bars; i++) {   /* bar lines */
             float bu = frac1((float)(i * 4 * PPQ) / len - u + 0.5f) - 0.5f;
             cv_rect(120 + (int32_t)(bu * 220.0f), y, 1, 8, G2);
         }
@@ -1013,7 +1013,7 @@ static void pic_mix(float tm)
     int i;
     if (!ui.mix_master) {
         for (i = 0; i < NTRACKS; i++) {
-            const track_t *t = &P.t[i];
+            const track_t *t = &PJ.t[i];
             int32_t x = 22 + i * 54, top = 30, h = 96, lv = (int32_t)((float)t->level / 1023.0f * (float)h),
                     mtr = (int32_t)(fm_minf(VIEW.track_peak[i] * 3.0f, 1.0f) * (float)h);
             cv_rect(x, top, 22, h, G1);
@@ -1025,8 +1025,8 @@ static void pic_mix(float tm)
                 ctext(x + 11, top + h / 2 - 6, &FONT_T, "M", BG);
         }
     } else {
-        float rv = (float)P.rv_amt / 1023.0f, sz = (float)P.rv_size / 1023.0f, dl = (float)P.dl_amt / 1023.0f,
-              fb = (float)P.dl_fb / 1023.0f, wob = fm_minf(VIEW.out_peak * 3.0f, 1.0f);
+        float rv = (float)PJ.rv_amt / 1023.0f, sz = (float)PJ.rv_size / 1023.0f, dl = (float)PJ.dl_amt / 1023.0f,
+              fb = (float)PJ.dl_fb / 1023.0f, wob = fm_minf(VIEW.out_peak * 3.0f, 1.0f);
         int32_t lx = 14, ly = 82, x, y;
         for (i = 0; i <= 96; i++) {      /* the spring: SIZE its coils, REVERB its brightness */
             float u = (float)i / 96.0f;
@@ -1045,7 +1045,7 @@ static void pic_mix(float tm)
                 int32_t r = 5 + (int32_t)(g * 10.0f) + (k == 0 && VIEW.playing ? (int32_t)((1.0f - beat) * 4.0f) : 0);
                 disc(136 + k * 14, 82, r, mix565(BG, k == 0 ? kcol(2) : kcol(3), fm_minf(g * 1.6f + 0.35f, 1.0f)));
             }
-            ctext(176, 112, &FONT_T, DIV_NAME[P.dl_div % DIV_N], G3);
+            ctext(176, 112, &FONT_T, DIV_NAME[PJ.dl_div % DIV_N], G3);
         }
         ctext(62, 112, &FONT_T, "SPRING", G3);
     }
@@ -1059,7 +1059,7 @@ static void draw_top(void)
     cv_begin(240, 144, BG);
     {                                    /* the header: the screen, the tracks, the tape */
         const char *name = ui.screen == S_MIX && ui.mix_master ? "MASTER"
-                         : ui.screen == S_SOUND ? ENG_NAME[P.t[cur_track].engine % ENG_N] : SCREEN_NAME[ui.screen];
+                         : ui.screen == S_SOUND ? ENG_NAME[PJ.t[cur_track].engine % ENG_N] : SCREEN_NAME[ui.screen];
         cv_text(8, 3, &FONT_XS, name, K_WHITE);
         for (i = 0; i < NTRACKS; i++) {
             int32_t x = 110 + i * 18;
@@ -1080,12 +1080,12 @@ static void draw_top(void)
         }
         if (ui.rec_armed && (!VIEW.recording || (ui.now / 250u) & 1u))
             disc(212, 9, 4, REDC);
-        num_text(P.tempo, n);
+        num_text(PJ.tempo, n);
         cv_text(234 - text_w(&FONT_T, n), 4, &FONT_T, n, G3);
     }
     switch (ui.screen) {
     case S_SOUND:
-        switch (P.t[cur_track].engine) {
+        switch (PJ.t[cur_track].engine) {
         case ENG_STRING: pic_string(tm); break;
         case ENG_PULSE: pic_pulse(tm); break;
         case ENG_FM: pic_fm(tm); break;
@@ -1161,15 +1161,15 @@ static void lights(void)
         b |= 1u << B_PLAY;
     if (ui.rec_armed && (!VIEW.recording || (ui.now / 250u) & 1u))
         b |= 1u << B_REC;
-    if (P.metro)
+    if (PJ.metro)
         b |= 1u << B_ARP;
     if (dirty)
         b |= 1u << B_SAVE;
     if (ui.screen == S_TAPE && VIEW.playing) {   /* the 16 white keys: where the loop is */
         static const uint8_t WK[16] = PLAT_WHITE_KEYS;
-        float len = (float)(P.loop_bars * 4u * PPQ);
+        float len = (float)(PJ.loop_bars * 4u * PPQ);
         k |= 1u << WK[(int)(VIEW.tape_pos / len * 16.0f) & 15];
-    } else if (P.t[cur_track].engine == ENG_DRUM) {
+    } else if (PJ.t[cur_track].engine == ENG_DRUM) {
         for (i = 0; i < NKEYS; i++)       /* the pads: lit a moment after each hit */
             if (ui.now - ui.hit_at[cur_track][i % NPADS] < 120u)
                 k |= 1u << i;
@@ -1225,13 +1225,13 @@ int app_expect(const char *what, int *got)
 {
     if (!strcmp(what, "screen")) *got = ui.screen;
     else if (!strcmp(what, "track")) *got = cur_track;
-    else if (!strcmp(what, "engine")) *got = P.t[cur_track].engine;
+    else if (!strcmp(what, "engine")) *got = PJ.t[cur_track].engine;
     else if (!strcmp(what, "playing")) *got = VIEW.playing;
     else if (!strcmp(what, "recording")) *got = VIEW.recording;
     else if (!strcmp(what, "events")) *got = tr.t.n[cur_track];
-    else if (!strcmp(what, "tempo")) *got = P.tempo;
+    else if (!strcmp(what, "tempo")) *got = PJ.tempo;
     else if (!strcmp(what, "beat")) *got = (int)VIEW.beat;
-    else if (!strcmp(what, "speed_neg")) *got = P.speed < 512;
+    else if (!strcmp(what, "speed_neg")) *got = PJ.speed < 512;
     else if (!strcmp(what, "dirty")) *got = dirty;
     else if (!strcmp(what, "loud")) *got = VIEW.out_peak > 0.01f;
     else if (!strcmp(what, "pad")) *got = ui.sel_pad[cur_track];
