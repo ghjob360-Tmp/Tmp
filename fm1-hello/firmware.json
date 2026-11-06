@@ -7,7 +7,10 @@
   "tagline": "the smallest fm1-base firmware that makes a sound",
   "description": "A two-operator FM voice on the FM-1's keys: OCT-/OCT+ octave, K1 FM depth, SAVE keeps them. Built as an example of one source compiled for the FM-1 (.fwsc) and for RemoteFM1 (.rfm1).",
   "tags": ["synth"],
+  "install": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/fm1-hello",
+  "site": "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/fm1-hello",
   "source": "https://github.com/ghjob360-Tmp/Tmp",
+  "screenshot": "app/docs/screen.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],

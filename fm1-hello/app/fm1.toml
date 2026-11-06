@@ -16,4 +16,4 @@ description = "A two-operator FM voice on the FM-1's keys: OCT-/OCT+ octave, K1 
 tags = ["synth"]
 install = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/fm1-hello"
 site = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/fm1-hello"
-screenshot = "fm1-hello/app/docs/screen.png"   # relative to the repository's root
+screenshot = "app/docs/screen.png"   # relative to fm1-hello/ (the directory above app/)
