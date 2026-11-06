@@ -8,6 +8,18 @@
 #include "fastmath.h"
 #include "synth.h"
 
+/* Vital's look: a deep blue-grey ground, teal for values, purple for modulation (gfx.c's palette replaced here) */
+#undef C_HI
+#define C_HI RGB(64, 224, 196)
+#undef C_DIM
+#define C_DIM RGB(58, 62, 78)
+#undef C_LINE
+#define C_LINE RGB(38, 40, 52)
+#undef C_GRAY
+#define C_GRAY RGB(150, 156, 176)
+#define C_MOD RGB(176, 132, 255)
+#define C_BG RGB(22, 23, 30)
+
 /* ------------------------------------------------------------- the patch --- */
 #define SET_MAGIC 0x50524D31u            /* "PRM1" */
 typedef struct {
@@ -306,6 +318,48 @@ static const page_t PAGES[NPAGES] = {
 
 static uint16_t *pv(const param_t *k) { return (uint16_t *)(void *)((uint8_t *)&set.p + k->off); }
 
+/* the matrix destination a parameter is, and how its units read on the parameter's bar (Vital: every knob a target) */
+static const float MOD_SCALE[DST_N] = {0, 1, 1, 24, 1, 1, 1, 24, 1, 64, 1, 2, 1, 1, 1, 1, 1, 1};   /* synth.c's */
+static int dst_of(const param_t *k, float *per_unit)
+{
+    static const struct { uint16_t off; uint8_t dst; float scale; } MAP[] = {
+        {O(osc[0].frame), DST_A_FRAME, 1.0f},  {O(osc[0].warp_amt), DST_A_WARP, 1.0f},
+        {O(osc[0].transpose), DST_A_PITCH, 1.0f / 48.0f}, {O(osc[0].level), DST_A_LEVEL, 1.0f},
+        {O(osc[1].frame), DST_B_FRAME, 1.0f},  {O(osc[1].warp_amt), DST_B_WARP, 1.0f},
+        {O(osc[1].transpose), DST_B_PITCH, 1.0f / 48.0f}, {O(osc[1].level), DST_B_LEVEL, 1.0f},
+        {O(cutoff), DST_CUTOFF, 1.0f / 128.0f}, {O(reso), DST_RESO, 1.0f}, {O(blend), DST_BLEND, 0.5f},
+        {O(drive), DST_DRIVE, 1.0f}, {O(noise), DST_NOISE, 1.0f}, {O(lfo[0].rate), DST_LFO1_RATE, 4.0f / 10.55f},
+        {O(lfo[1].rate), DST_LFO2_RATE, 4.0f / 10.55f}, {O(volume), DST_VOLUME, 1.0f}};
+    uint32_t i;
+    for (i = 0; i < sizeof MAP / sizeof MAP[0]; i++)
+        if (MAP[i].off == k->off) {
+            if (per_unit)
+                *per_unit = MAP[i].scale;
+            return MAP[i].dst;
+        }
+    return -1;
+}
+static float mod_reach(int dst, float per_unit)   /* how far the matrix can move it, in bar fractions */
+{
+    float r = 0.0f;
+    int i;
+    for (i = 0; i < NMOD; i++)
+        if (set.p.mod[i].src && set.p.mod[i].dst == (uint16_t)dst)
+            r += fm_fabsf(((float)set.p.mod[i].amt - 512.0f) / 511.0f) * MOD_SCALE[dst] * per_unit;
+    return r;
+}
+static int src_of_page(int page)          /* the page's own modulation source, if it is one */
+{
+    switch (page) {
+    case 3: return SRC_ENV1;
+    case 4: return SRC_ENV2;
+    case 5: return SRC_ENV3;
+    case 6: return SRC_LFO1;
+    case 7: return SRC_LFO2;
+    default: return SRC_NONE;
+    }
+}
+
 /* ---------------------------------------------------------- MIDI and sound --- */
 static volatile uint16_t cc_in[2];       /* CC 74 cutoff, 71 resonance (+1; 0 none) */
 static void midi_in(void)                /* audio interrupt */
@@ -350,6 +404,8 @@ static struct {
     uint32_t msg_until, keys, btn, cpu_at;
     uint8_t redraw, last_press;
     uint32_t cpu, voices;
+    int mod_src;                         /* a modulation source picked up (Vital's drag), SRC_NONE when not */
+    uint32_t mod_at, top_at, bot_at;
 } ui;
 
 static void copy_text(char *d, const char *s, uint32_t max)
@@ -497,7 +553,18 @@ static void input(void)
         case B_EDIT: go_page(PG_FILT); break;
         case B_ENV: go_page(ui.page == PG_ENV1 ? PG_ENV2 : ui.page == PG_ENV2 ? PG_ENV3 : PG_ENV1); break;
         case B_LFO: go_page(ui.page == PG_LFO1 ? PG_LFO2 : PG_LFO1); break;
-        case B_ARP: go_page(PG_MAT); break;
+        case B_ARP:
+            if (ui.mod_src) {            /* put it down */
+                ui.mod_src = SRC_NONE;
+                app_say("MOD", "DONE");
+            } else if (src_of_page(ui.page)) {   /* picked up: now turn any knob it should move */
+                ui.mod_src = src_of_page(ui.page);
+                ui.mod_at = plat_ms();
+                app_say(SRC_T[ui.mod_src], "> TURN A KNOB");
+            } else {
+                go_page(PG_MAT);
+            }
+            break;
         case B_FX:
             if (ui.page == PG_FX)
                 ui.row[PG_FX] = (ui.row[PG_FX] + 1) % (int)PAGES[PG_FX].nrows;
@@ -546,6 +613,40 @@ static void input(void)
         int32_t v;
         if ((e = plat_enc(EN_K1 + i)) == 0 || !pk->label)
             continue;
+        if (ui.mod_src) {                /* a source in hand: the knob sets how much it moves this parameter */
+            float pu;
+            int d = dst_of(pk, &pu), s2, slot = -1;
+            ui.mod_at = plat_ms();
+            if (d < 0) {
+                app_say(pk->label, "NOT A TARGET");
+                continue;
+            }
+            for (s2 = 0; s2 < NMOD && slot < 0; s2++)
+                if (set.p.mod[s2].src == (uint16_t)ui.mod_src && set.p.mod[s2].dst == (uint16_t)d)
+                    slot = s2;
+            for (s2 = 0; s2 < NMOD && slot < 0; s2++)
+                if (!set.p.mod[s2].src || !set.p.mod[s2].dst)
+                    slot = s2;
+            if (slot < 0) {
+                app_say("MATRIX", "FULL");
+                continue;
+            }
+            if (set.p.mod[slot].src != (uint16_t)ui.mod_src || set.p.mod[slot].dst != (uint16_t)d)
+                set.p.mod[slot].amt = 512;
+            set.p.mod[slot].src = (uint16_t)ui.mod_src;
+            set.p.mod[slot].dst = (uint16_t)d;
+            set.p.mod[slot].amt = (uint16_t)clamp((int32_t)set.p.mod[slot].amt + e * (fine ? 2 : 10), 0, 1023);
+            {
+                char n[24], a2[8];
+                copy_text(n, DST_T[d], sizeof n);
+                text_cat(n, " ", sizeof n);
+                num_text(((int32_t)set.p.mod[slot].amt - 512) * 100 / 511, a2);
+                text_cat(n, a2, sizeof n);
+                app_say(SRC_T[ui.mod_src], n);
+            }
+            changed();
+            continue;
+        }
         v = clamp((int32_t)*pv(pk) + e * (fine || pk->step == 1 ? 1 : pk->step), pk->lo, pk->hi);
         *pv(pk) = (uint16_t)v;
         if (pk->fmt == F_ENUM || pk->fmt == F_ONOFF || pk->fmt == F_STYLE) {
@@ -569,8 +670,11 @@ static void input(void)
     ui.btn = btn;
     {
         static const uint8_t PBTN[NPAGES] = {B_SEL, B_SEL, B_EDIT, B_ENV, B_ENV, B_ENV, B_LFO, B_LFO, B_ARP, B_FX, B_HOME};
+        uint32_t lit = btn | 1u << PBTN[ui.page] | (set_dirty ? 1u << B_SAVE : 0u);
+        if (ui.mod_src && (plat_ms() / 200u) & 1u)
+            lit |= 1u << B_ARP;          /* a source in hand: ARP blinks */
         plat_glow(1);
-        plat_leds(btn | 1u << PBTN[ui.page] | (set_dirty ? 1u << B_SAVE : 0u), keys);
+        plat_leds(lit, keys);
     }
 }
 
@@ -594,6 +698,52 @@ static void plot(int32_t x0, int32_t y0, int32_t w, int32_t h, const float *v, i
     }
 }
 
+static void disc_(int32_t cx, int32_t cy, int32_t r, uint16_t c)
+{
+    int32_t y;
+    for (y = -r; y <= r; y++) {
+        int32_t w = (int32_t)fm_sqrtf((float)(r * r - y * y));
+        cv_rect(cx - w, cy + y, 2 * w + 1, 1, c);
+    }
+}
+
+/* synth.c's warp, for the picture (no FM / RM: they need the other oscillator) */
+static float warp_preview(int type, float p, float w, float *win)
+{
+    float c, a, d;
+    *win = 1.0f;
+    switch (type) {
+    case WARP_SYNC: return p * fm_exp2f(4.0f * w) - fm_floorf(p * fm_exp2f(4.0f * w));
+    case WARP_FORMANT:
+        *win = fm_sin_turns(p * 0.5f);
+        return p * fm_exp2f(4.0f * w) - fm_floorf(p * fm_exp2f(4.0f * w));
+    case WARP_QUANTIZE: {
+        float q = 1.0f - w;
+        q = fm_exp2f(q * q * q * 0.85f * 10.0f + 1.0f);
+        return fm_floorf(p * q) / q;
+    }
+    case WARP_BEND: {
+        float o = (w - w * w) * 2.0f, s3 = w * 3.0f, p2 = p * p, p3 = p2 * p;
+        return p3 + (s3 + o) * (p2 - p3) + (s3 - o) * (p - 2.0f * p2 + p3);
+    }
+    case WARP_SQUEEZE:
+        d = w * 1.9f + 0.05f;
+        c = p - 0.5f;
+        a = fm_fabsf(c);
+        a = a > d * 0.25f ? 0.5f - (0.5f - a) / (2.0f - d) : a / d;
+        return (c < 0.0f ? -a : a) + 0.5f;
+    case WARP_PULSE:
+        d = 1.0f / fm_maxf(1.0f - w, 0.02f);
+        c = (p - 0.5f) * d;
+        if (c >= 0.5f || c < -0.5f) {
+            *win = 0.0f;
+            return 0.0f;
+        }
+        return c + 0.5f;
+    default: return p;
+    }
+}
+
 static void draw_graph(void)
 {
     const page_t *pg = &PAGES[ui.page];
@@ -602,15 +752,31 @@ static void draw_graph(void)
     const int32_t X = 10, Y = 30, W = 220, H = 76;
     cv_rect(X, Y + H / 2, W, 1, C_LINE);
     switch (pg->kind) {
-    case K_OSC: {                        /* the frame playing (FRAME), the next ones faint behind */
-        int o = ui.page == PG_OSCB;
+    case K_OSC: {                        /* Vital's wavetable view: every frame stacked back, the one playing lit */
+        int o = ui.page == PG_OSCB, f;
         const wt_t *t = &wt_buf[o][wtst[o].cur];
-        float fp = (float)set.p.osc[o].frame * (float)(WT_FRAMES - 1) / 1023.0f, back;
-        for (back = 2.0f; back >= 0.0f; back -= 1.0f) {
-            float f = fp + back > (float)(WT_FRAMES - 1) ? (float)(WT_FRAMES - 1) : fp + back;
-            for (i = 0; i < 97; i++)
-                v[i] = wt_peek(t, f, (float)i / 96.0f) * 0.95f;
-            plot(X + (int32_t)back * 6, Y - (int32_t)back * 6, W - 12, H, v, 97, back > 0.0f ? C_LINE : C_HI);
+        const osc_p *op = &set.p.osc[o];
+        float fp = SVIEW.active ? SVIEW.frame[o] : (float)op->frame * (float)(WT_FRAMES - 1) / 1023.0f,
+              wa = SVIEW.active ? SVIEW.warp[o] : (float)op->warp_amt / 1023.0f;
+        for (f = WT_FRAMES - 1; f >= 0; f--) {   /* the stack, back to front */
+            for (i = 0; i < 49; i++)
+                v[i] = wt_peek(t, (float)f, (float)i / 48.0f) * 0.9f;
+            plot(X + 30 + f * 6, Y + 22 - f * 3, W - 80, H - 40, v, 49, f == (int)(fp + 0.5f) ? C_DIM : C_LINE);
+        }
+        for (i = 0; i < 97; i++) {           /* the playing frame, between frames, through the warp */
+            float win, ph = warp_preview(op->warp, (float)i / 96.0f, wa, &win);
+            v[i] = wt_peek(t, fp, ph) * win * 0.9f;
+        }
+        plot(X + 30 + (int32_t)(fp * 6.0f), Y + 22 - (int32_t)(fp * 3.0f), W - 80, H - 40, v, 97, C_HI);
+        {
+            char n[24];
+            copy_text(n, WARP_T[op->warp % WARP_N], sizeof n);
+            cv_text(X, Y + H - 14, &FONT_T, n, op->warp ? C_HI : C_DIM);
+            copy_text(n, SM_T[op->morph % SM_N], sizeof n);
+            cv_text(X, Y + H - 2, &FONT_T, n, op->morph ? C_MOD : C_DIM);
+            num_text((int32_t)(fp * 10.0f + 0.5f) / 10 + 1, n);
+            text_cat(n, "/8", sizeof n);
+            cv_text(X + W - text_w(&FONT_T, n), Y + H - 2, &FONT_T, n, C_GRAY);
         }
         break;
     }
@@ -641,6 +807,11 @@ static void draw_graph(void)
             }
         }
         plot(X, Y, W, H, v, 97, C_HI);
+        if (SVIEW.active) {              /* the newest voice's level, now (Vital's playhead) */
+            int32_t y = Y + H / 2 - (int32_t)((SVIEW.env[ui.page - PG_ENV1] * 2.0f - 1.0f) * (float)(H / 2));
+            cv_rect(X, y, W, 1, C_DIM);
+            disc_(X + W - 4, y, 3, C_WHITE);
+        }
         break;
     }
     case K_LFO: {
@@ -666,6 +837,11 @@ static void draw_graph(void)
             v[i] = y * 0.9f;
         }
         plot(X, Y, W, H, v, 97, C_HI);
+        if (SVIEW.active) {              /* where the LFO is, on its first cycle */
+            int k = ui.page - PG_LFO1;
+            disc_(X + (int32_t)(SVIEW.lfo_ph[k] * (float)W * 0.5f), Y + H / 2 - (int32_t)(SVIEW.lfo[k] * 0.9f * (float)(H / 2)),
+                  4, C_WHITE);
+        }
         break;
     }
     case K_FILTER: {                     /* a two-pole's response, low -> band -> high by the blend */
@@ -709,7 +885,7 @@ static void draw_graph(void)
             int32_t bx = X + i * 31, here = i == ui.row[PG_FX];
             cv_rect(bx, Y + 26, 28, 22, here ? C_HI : on[i] ? C_DIM : C_LINE);
             cv_text(bx + (28 - text_w(&FONT_T, TAG[i])) / 2, Y + 31, &FONT_T, TAG[i],
-                    here ? C_BLACK : on[i] ? C_WHITE : C_GRAY);
+                    here ? C_BG : on[i] ? C_WHITE : C_GRAY);
         }
         break;
     }
@@ -722,48 +898,84 @@ static void draw_graph(void)
     }
 }
 
-static void draw(void)
+static void draw_top(void)
 {
     const page_t *pg = &PAGES[ui.page];
     const row_t *rw = &pg->rows[ui.row[ui.page]];
     char t[24], n[12];
-    int32_t i, x;
-    cv_begin(240, 120, C_BLACK);
+    int32_t x;
+    cv_begin(240, 120, C_BG);
     x = cv_text(8, 4, &FONT_B, pg->name, C_WHITE);
     if (pg->nrows > 1)
         cv_text(x + 8, 7, &FONT_XS, rw->name, C_HI);
+    copy_text(t, "< ", sizeof t);       /* the preset, Vital's way: arrows either side */
+    text_cat(t, FACTORY_NAME[set.factory % NFACTORY], sizeof t);
+    text_cat(t, set_dirty ? " * >" : " >", sizeof t);
+    cv_text(232 - text_w(&FONT_T, t), 4, &FONT_T, t, C_GRAY);
     copy_text(t, "CPU ", sizeof t);
     num_text((int32_t)ui.cpu, n);
     text_cat(t, n, sizeof t);
     text_cat(t, "%", sizeof t);
-    cv_text(232 - text_w(&FONT_T, t), 4, &FONT_T, t, ui.cpu > 80u ? C_WHITE : C_GRAY);
-    copy_text(t, FACTORY_NAME[set.factory % NFACTORY], sizeof t);
-    if (set_dirty)
-        text_cat(t, "*", sizeof t);
-    cv_text(232 - text_w(&FONT_T, t), 16, &FONT_T, t, C_DIM);
+    cv_text(180 - text_w(&FONT_T, t), 16, &FONT_T, t, ui.cpu > 80u ? C_WHITE : C_DIM);
+    {                                    /* the output meter */
+        int32_t w = (int32_t)(fm_minf(SVIEW.out_peak, 1.0f) * 48.0f);
+        cv_rect(184, 19, 48, 4, C_LINE);
+        cv_rect(184, 19, w, 4, SVIEW.out_peak > 0.95f ? C_WHITE : C_HI);
+    }
     draw_graph();
+    if (ui.mod_src) {                    /* a source in hand: a purple banner */
+        cv_rect(0, 106, 240, 14, C_MOD);
+        copy_text(t, SRC_T[ui.mod_src], sizeof t);
+        text_cat(t, "  >  TURN A KNOB", sizeof t);
+        cv_text(8, 106, &FONT_T, t, C_BG);
+        cv_text(232 - text_w(&FONT_T, "ARP: DONE"), 106, &FONT_T, "ARP: DONE", C_BG);
+    }
     if (plat_ms() < ui.msg_until) {
-        cv_rect(0, 40, 240, 44, C_BLACK);
-        x = cv_text(10, 50, &FONT_M, ui.msg[0], C_WHITE);
-        cv_text(x + 8, 50, &FONT_M, ui.msg[1], C_HI);
+        int32_t w = text_w(&FONT_XS, ui.msg[0]) + (ui.msg[1][0] ? 8 + text_w(&FONT_XS, ui.msg[1]) : 0) + 16;
+        cv_rect(120 - w / 2, 26, w, 17, C_LINE);
+        cv_rect(120 - w / 2, 42, w, 1, ui.mod_src ? C_MOD : C_HI);
+        x = cv_text(120 - w / 2 + 8, 27, &FONT_XS, ui.msg[0], C_WHITE);
+        cv_text(x + 8, 27, &FONT_XS, ui.msg[1], ui.mod_src ? C_MOD : C_HI);
     }
     cv_blit(0, 0);
-    /* bottom: the row's four, the row dots, the page tabs */
-    cv_begin(240, 120, C_BLACK);
+}
+
+static void draw_bottom(void)
+{
+    const page_t *pg = &PAGES[ui.page];
+    const row_t *rw = &pg->rows[ui.row[ui.page]];
+    char t[24];
+    int32_t i;
+    cv_begin(240, 120, C_BG);
     for (i = 0; i < 4; i++) {
         const param_t *k = &rw->k[i];
         int32_t y = 2 + i * 19, v, w;
+        float pu = 0.0f, frac;
+        int d;
         if (!k->label)
             continue;
         v = *pv(k);
-        cv_text(8, y, &FONT_XS, k->label, C_GRAY);
+        d = dst_of(k, &pu);
+        cv_text(8, y, &FONT_XS, k->label, d >= 0 && ui.mod_src ? C_MOD : C_GRAY);
         cv_rect(92, y + 5, 90, 5, C_LINE);
+        frac = k->hi > k->lo ? (float)(v - k->lo) / (float)(k->hi - k->lo) : 0.0f;
         if (k->fmt == F_BIP) {
             w = (v - 512) * 45 / 511;
             cv_rect(w < 0 ? 137 + w : 137, y + 5, w < 0 ? -w : w, 5, C_HI);
         } else {
-            w = k->hi > k->lo ? (v - k->lo) * 90 / (k->hi - k->lo) : 0;
+            w = (int32_t)(frac * 90.0f);
             cv_rect(92, y + 5, w, 5, C_HI);
+        }
+        if (d >= 0) {
+            float reach = mod_reach(d, pu);
+            if (reach > 0.001f) {        /* Vital's modulation ring: the reach, purple, round the value */
+                float a0 = fm_clampf(frac - reach, 0.0f, 1.0f), a1 = fm_clampf(frac + reach, 0.0f, 1.0f);
+                cv_rect(92 + (int32_t)(a0 * 90.0f), y + 11, (int32_t)((a1 - a0) * 90.0f) + 1, 2, C_MOD);
+            }
+            if (SVIEW.active && fm_fabsf(SVIEW.mods[d]) > 0.0001f) {   /* where the newest voice has it now */
+                float now = fm_clampf(frac + SVIEW.mods[d] * pu, 0.0f, 1.0f);
+                cv_rect(91 + (int32_t)(now * 90.0f), y + 2, 2, 11, C_WHITE);
+            }
         }
         value_text(k, v, t);
         cv_text(234 - text_w(&FONT_XS, t), y, &FONT_XS, t, C_WHITE);
@@ -772,17 +984,23 @@ static void draw(void)
         cv_rect(8 + i * 9, 80, 6, 4, i == ui.row[ui.page] ? C_HI : C_LINE);
     for (i = 0; i < NPAGES; i++) {
         int32_t bx = 4 + i * 21;
-        int here = i == ui.page;
-        cv_rect(bx, 92, 20, 20, here ? C_HI : C_LINE);
-        cv_text(bx + (20 - text_w(&FONT_T, PAGES[i].tab)) / 2, 96, &FONT_T, PAGES[i].tab, here ? C_BLACK : C_GRAY);
+        int here = i == ui.page, src = src_of_page(i) && src_of_page(i) == ui.mod_src;
+        cv_rect(bx, 92, 20, 20, here ? C_HI : src ? C_MOD : C_LINE);
+        cv_text(bx + (20 - text_w(&FONT_T, PAGES[i].tab)) / 2, 96, &FONT_T, PAGES[i].tab, here || src ? C_BG : C_GRAY);
     }
     cv_blit(0, 120);
+}
+
+static void draw(void)
+{
+    draw_top();
+    draw_bottom();
 }
 
 void app_ui_init(void)
 {
     touch_on(1);
-    lcd_fill(0, 0, 240, 240, C_BLACK);
+    lcd_fill(0, 0, 240, 240, C_BG);
     ui.redraw = 1;
 }
 
@@ -800,6 +1018,10 @@ void app_frame(void)
         ui.cpu = c;
         ui.voices = vn;
     }
+    if (ui.mod_src && now - ui.mod_at > 10000u) {   /* a source left in hand puts itself down */
+        ui.mod_src = SRC_NONE;
+        ui.redraw = 1;
+    }
     if (ui.msg_until && now >= ui.msg_until) {
         ui.msg_until = 0;
         ui.redraw = 1;
@@ -807,6 +1029,16 @@ void app_frame(void)
     if (ui.redraw) {
         ui.redraw = 0;
         draw();
+        ui.top_at = ui.bot_at = now;
+    } else if (SVIEW.active || SVIEW.out_peak > 0.003f) {   /* live: playheads ~12 / s, the rings' ticks ~8 / s */
+        if (now - ui.top_at >= 80u) {
+            ui.top_at = now;
+            draw_top();
+        }
+        if (now - ui.bot_at >= 120u) {
+            ui.bot_at = now;
+            draw_bottom();
+        }
     }
 }
 
@@ -824,6 +1056,11 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "dirty")) *got = set_dirty;
     else if (!strcmp(what, "shed")) *got = (int)synth_shed_count();
     else if (!strcmp(what, "loud")) *got = synth_peak() > 0.02f;
+    else if (!strcmp(what, "modsrc")) *got = ui.mod_src;
+    else if (!strncmp(what, "slot", 4) && what[4] >= '0' && what[4] <= '7' && !strcmp(what + 5, "dst"))
+        *got = set.p.mod[what[4] - '0'].dst;
+    else if (!strncmp(what, "slot", 4) && what[4] >= '0' && what[4] <= '7' && !strcmp(what + 5, "amt"))
+        *got = ((int)set.p.mod[what[4] - '0'].amt - 512) * 100 / 511;
     else return 0;
     return 1;
 }

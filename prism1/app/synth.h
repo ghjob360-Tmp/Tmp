@@ -70,3 +70,13 @@ int synth_voices(void);                              /* voices sounding */
 int synth_last_note(void);                           /* the newest voice's note, -1 none */
 float synth_peak(void);                              /* output peak since the last call */
 uint32_t synth_shed_count(void);
+
+/* the newest sounding voice, live, for the screen (Vital's modulation rings and playheads) */
+typedef struct {
+    int active;
+    float mods[DST_N];                   /* the matrix's sum per destination, in the destination's units */
+    float env[3], lfo[2], lfo_ph[2];
+    float frame[2], warp[2];             /* the oscillators' frame (0..7) and warp (0..1), modulated */
+    float out_peak;
+} synth_view_t;
+extern volatile synth_view_t SVIEW;

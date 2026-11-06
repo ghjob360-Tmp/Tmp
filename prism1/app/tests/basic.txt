@@ -66,6 +66,20 @@ tap LFO
 wait 30
 expect page 6
 shot lfo.png
+# Vital's drag: on LFO 1, ARP picks the LFO up; a knob on another page sets how much it moves that parameter
+tap ARP
+wait 30
+expect modsrc 4
+tap EDIT
+wait 30
+turn K3 3
+wait 30
+expect slot0dst 9
+expect slot0amt 5
+shot assign.png
+tap ARP
+wait 30
+expect modsrc 0
 tap ARP
 wait 30
 expect page 8

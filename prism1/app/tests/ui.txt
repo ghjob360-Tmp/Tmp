@@ -1,0 +1,43 @@
+# the Vital style screens while sounds play: the wavetable stack, the modulation rings, the playheads
+wait 800
+turn PRESET 3
+wait 200
+key 7 down 100
+key 11 down 100
+wait 900
+shot wt_stack.png
+tap EDIT
+wait 400
+shot rings.png
+tap ENV
+wait 300
+shot env_live.png
+tap LFO
+wait 300
+shot lfo_live.png
+key 7 up
+key 11 up
+turn PRESET 3
+wait 300
+tap EDIT
+wait 100
+key 7 down 100
+wait 700
+shot rings_wobble.png
+tap SEL
+wait 30
+turn K3 3
+turn K4 40
+wait 600
+shot warp.png
+key 7 up
+wait 200
+tap LFO
+wait 30
+tap ARP
+wait 30
+tap SEL
+wait 60
+turn K2 4
+wait 100
+shot assign_osc.png

@@ -856,6 +856,8 @@ INL void fx_sample(float *L, float *R)
 
 /* ------------------------------------------------------------------ render --- */
 static float peak;
+volatile synth_view_t SVIEW;
+static RAMC void view_update(void);
 
 static RAMC void clear_all(void)
 {
@@ -1009,6 +1011,32 @@ RAMC void synth_render(int32_t *lr, uint32_t n, float gain)
             lr[2u * (i + j)] = (int32_t)(l * gain);
             lr[2u * (i + j) + 1u] = (int32_t)(r * gain);
         }
+    }
+    view_update();
+    SVIEW.out_peak = fm_maxf(SVIEW.out_peak * 0.9f, peak);
+}
+
+static RAMC void view_update(void)
+{
+    int i, best = -1, k;
+    uint32_t age = 0;
+    for (i = 0; i < NVOICES; i++)
+        if (V[i].active && V[i].age >= age) {
+            age = V[i].age;
+            best = i;
+        }
+    SVIEW.active = best >= 0;
+    if (best < 0)
+        return;
+    for (k = 0; k < DST_N; k++)
+        SVIEW.mods[k] = V[best].mods[k];
+    for (k = 0; k < 3; k++)
+        SVIEW.env[k] = V[best].env[k].val;
+    for (k = 0; k < 2; k++) {
+        SVIEW.lfo[k] = V[best].lfo[k].val;
+        SVIEW.lfo_ph[k] = P.lfo[k].mode == LM_FREE ? lfo_free_ph[k] : V[best].lfo[k].ph;
+        SVIEW.frame[k] = V[best].frame[k];
+        SVIEW.warp[k] = V[best].warp[k];
     }
 }
 

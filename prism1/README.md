@@ -2,13 +2,41 @@
 
 把 [Vital](https://github.com/mtytel/vital)（Matt Tytel，GPL-3.0）的 voice 架構縮小到 M-VAVE FM-1 的一顆 360 MHz 核心上。
 同一份原始碼編出：
-- `dist/prism-1-0.1.fwsc`：燒進 FM-1 實機（安裝識別碼 `FM-1_95000100`）
-- `dist/prism-1-0.1.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/prism-1-0.2.fwsc`：燒進 FM-1 實機（安裝識別碼 `FM-1_95000200`）
+- `dist/prism-1-0.2.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
 - `dist/prism-1-demo.mp3`：8 組出廠音色的試聽，用 host 模擬器錄的，和實機是同一份 DSP
 
 授權 **GPL-3.0-only**（因為依循 Vital 的公式），詳見 `LICENSING.md`。本專案與 Vital Audio、M-VAVE 無關。
 
 ![pages](app/docs/pages.png)
+
+## 0.2：Vital 風格的 UI/UX
+
+| | | |
+|---|---|---|
+| ![](app/docs/vital_wt_stack.png) | ![](app/docs/vital_rings_wobble.png) | ![](app/docs/vital_warp.png) |
+| ![](app/docs/vital_env_live.png) | ![](app/docs/vital_lfo_live.png) | ![](app/docs/vital_assign_osc.png) |
+
+Vital 的介面有四個招牌，0.2 都搬了過來：
+
+1. **調變環**：
+   - Vital 的每顆旋鈕外圈有紫色的弧，表示被調變的範圍。PRISM-1 的參數條下面多了一條紫線，表示調變矩陣能把它推多遠，也就是所有指向這個目的地的槽 |amount| 的總和，換算成這條參數條的單位。
+   - 只要有 voice 在發聲，就會有一根白色指標顯示最新 voice 現在的實際值。這個值由引擎的 `SVIEW` 即時提供，每個 render 都更新。
+   - 所以 LFO 調 cutoff 時，可以看到白色指標在紫色範圍裡來回跑。
+2. **拖放指派調變**：
+   - Vital 是把 ENV / LFO 拖到旋鈕上。FM-1 沒有觸控，所以改成：在 ENV1–3 或 LFO1–2 頁按 ARP，就「撿起」這個來源。
+   - 撿起後，ARP 燈會閃，畫面底部出現紫色橫幅「LFO1 > TURN A KNOB」，可以被調變的參數標籤變成紫色，來源的頁籤也變紫色。
+   - 接著到任何一頁轉任何一顆可調變的旋鈕：會自動找到或建立一個「LFO1 → 該參數」的調變槽，旋鈕調的是調變量而不是參數本身，提示會顯示「LFO1  CUTOFF +24」。
+   - 再按一次 ARP 放下，或 10 秒沒動作會自動放下。不是來源頁時，ARP 還是跳到 MATRIX 頁。
+3. **Wavetable 堆疊視圖**：
+   - 8 幀從後往前斜著疊起來，靠近播放位置的那幀稍微亮一點。
+   - 播放中的波形用青綠色畫在它實際的（被調變後的）幀位置上，已經套用了目前的 warp，畫的就是 voice 實際聽到的相位扭曲。warp 的公式和引擎相同，只是 FM / RM 需要另一個振盪器，所以不畫。
+   - 左下角顯示 warp 名稱（青綠）和 spectral morph 名稱（紫），右下角顯示「幀 x/8」。
+4. **即時游標和 Vital 的外觀**：
+   - 包絡頁：最新 voice 的電平是一條線和一個點。LFO 頁：一個點跟著相位跑。
+   - 配色是深藍灰底、青綠表示數值、紫色表示調變（在 app.c 裡重新定義了 gfx.c 的配色巨集）。
+   - 標題列是 Vital 式的「< 預設名 >」（未存時加 `*`），還有 CPU 和輸出電平表。
+   - 有 voice 在發聲時，上半部約 12 fps、下半部約 8 fps，所以白色指標會動。
 
 ## Vital 與 PRISM-1 的對照
 
@@ -97,9 +125,9 @@ app/tests/stress.txt   最壞情況的 CPU 量測
 
 ```sh
 ./build.sh --host && app/build/host/prism-1_host app/tests/basic.txt app/build/host
-./build.sh --release 0.1            # → app/build/prism-1-0.1.fwsc
-./build.sh --rfm1 --release 0.1     # → app/build/prism-1-0.1.rfm1（先 commit）
-node base/tests/rfm1_test.mjs app/build/prism-1-0.1.rfm1
+./build.sh --release 0.1            # → app/build/prism-1-0.2.fwsc
+./build.sh --rfm1 --release 0.1     # → app/build/prism-1-0.2.rfm1（先 commit）
+node base/tests/rfm1_test.mjs app/build/prism-1-0.2.rfm1
 ```
 
 ### 實測結果
@@ -129,5 +157,5 @@ node base/tests/rfm1_test.mjs app/build/prism-1-0.1.rfm1
 4. 多個使用者音色槽。
 
 ## 安裝
-- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/prism-1-0.1.rfm1`
-- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/prism-1-0.1.fwsc`
+- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/prism-1-0.2.rfm1`
+- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/prism-1-0.2.fwsc`
