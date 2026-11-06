@@ -1,0 +1,19 @@
+# HELLO's build settings (base/tools/build.py)
+name = "HELLO"                 # the build's files: hello.fwsc, hello-X.Y.rfm1, hello_host
+id_prefix = "FM-1_93"          # package identity: dev FM-1_9300, releases FM-1_93XXYYZZ
+usb_manufacturer = "fm1-hello"
+usb_product = "HELLO FM-1"     # "FM-1" in it: the installers find the port by that
+o2 = []
+words = "words.tsv"
+ble = false                    # no Bluetooth: no JieLi radio libraries, smaller
+# the .rfm1's manifest and firmware.json
+repo = "https://github.com/ghjob360-Tmp/Tmp"
+licence = "MPL-2.0"
+authors = ["ghjob360"]
+author = "ghjob360"
+tagline = "the smallest fm1-base firmware that makes a sound"
+description = "A two-operator FM voice on the FM-1's keys: OCT-/OCT+ octave, K1 FM depth, SAVE keeps them. Built as an example of one source compiled for the FM-1 (.fwsc) and for RemoteFM1 (.rfm1)."
+tags = ["synth"]
+install = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/fm1-hello"
+site = "https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/fm1-hello"
+screenshot = "fm1-hello/app/docs/screen.png"   # relative to the repository's root

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MPL-2.0
+# HELLO's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://ghjob360-tmp.github.io/Tmp/words/
+HELLO	hello
+OCTAVE	octave
+DEPTH	depth
+SAVED	saved

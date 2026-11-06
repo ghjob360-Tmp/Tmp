@@ -1,0 +1,3 @@
+[submodule "fm1-hello/base"]
+	path = fm1-hello/base
+	url = https://github.com/charlesvestal/fm1-base

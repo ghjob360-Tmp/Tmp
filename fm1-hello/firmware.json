@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "hello",
+  "name": "fm1-hello",
+  "author": "ghjob360",
+  "license": "MPL-2.0",
+  "tagline": "the smallest fm1-base firmware that makes a sound",
+  "description": "A two-operator FM voice on the FM-1's keys: OCT-/OCT+ octave, K1 FM depth, SAVE keeps them. Built as an example of one source compiled for the FM-1 (.fwsc) and for RemoteFM1 (.rfm1).",
+  "tags": ["synth"],
+  "source": "https://github.com/ghjob360-Tmp/Tmp",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["usb-audio-in", "usb-audio-out", "screen-reader"]
+  }
+}

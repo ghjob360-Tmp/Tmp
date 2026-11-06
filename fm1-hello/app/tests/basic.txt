@@ -1,0 +1,33 @@
+# HELLO in the host simulator: ./build.sh --host, then
+#   app/build/host/hello_host app/tests/basic.txt app/build/host
+wait 600
+shot boot.png
+key 7 down
+wait 50
+expect note 60
+expect midi_out 1
+shot key.png
+key 7 up
+wait 50
+expect note -1
+tap OCT+
+wait 30
+expect octave 1
+expect dirty 1
+turn K1 3
+wait 30
+expect depth 7
+tap SAVE
+wait 30
+expect dirty 0
+expect store_writes 1
+reboot
+wait 600
+expect octave 1
+expect depth 7
+midi 90 3C 64
+wait 30
+expect note 60
+wav note.wav
+wait 300
+wavstop
