@@ -312,7 +312,7 @@ static void pic_rnd(int k)
     int32_t X[32], Y[32];
     int i, st = pt.v[P_RND(k, STYLE)] & 3;
     for (i = 0; i < 32; i++) {
-        float v = CORE_VIEW.rnd_hist[k][i];
+        float v = (float)CORE_VIEW.rnd_hist[k][i] * (1.0f / 255.0f);
         if (!CORE_VIEW.active) {         /* no voice: a sketch of the style */
             float x = (float)i * 0.25f + ui_t * 0.5f;
             uint32_t a = (uint32_t)x * 2654435761u, b = ((uint32_t)x + 1u) * 2654435761u;

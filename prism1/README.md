@@ -1,161 +1,151 @@
-# PRISM-1：照 Vital 架構縮小的 FM-1 wavetable 合成器
+# PRISM-1 1.0：照 Vital 的架構，把 FM-1 用到滿的 wavetable 合成器
 
-把 [Vital](https://github.com/mtytel/vital)（Matt Tytel，GPL-3.0）的 voice 架構縮小到 M-VAVE FM-1 的一顆 360 MHz 核心上。
+把 [Vital](https://github.com/mtytel/vital)（Matt Tytel，GPL-3.0）的聲音架構和互動方式，盡量完整地搬到 M-VAVE FM-1 的兩顆 360 MHz 核心上。Vital 的系統架構與互動整理在 [`docs/VITAL_REFERENCE.md`](docs/VITAL_REFERENCE.md)，每一項都對照了 PRISM-1 的做法。
+
 同一份原始碼編出：
-- `dist/prism-1-0.2.fwsc`：燒進 FM-1 實機（安裝識別碼 `FM-1_95000200`）
-- `dist/prism-1-0.2.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
-- `dist/prism-1-demo.mp3`：8 組出廠音色的試聽，用 host 模擬器錄的，和實機是同一份 DSP
+- `dist/prism-1-1.0.fwsc`：燒進 FM-1 實機
+- `dist/prism-1-1.0.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/prism-1-demo.mp3`：24 個出廠音色各彈一段，用 host 模擬器錄的，和實機是同一份 DSP
 
-授權 **GPL-3.0-only**（因為依循 Vital 的公式），詳見 `LICENSING.md`。本專案與 Vital Audio、M-VAVE 無關。
+授權 **GPL-3.0-only**（依循 Vital 的公式），詳見 `LICENSING.md`。本專案與 Vital Audio、M-VAVE 無關。
 
 ![pages](app/docs/pages.png)
 
-## 0.2：Vital 風格的 UI/UX
+## 1.0 有什麼（相對 0.2）
 
-| | | |
-|---|---|---|
-| ![](app/docs/vital_wt_stack.png) | ![](app/docs/vital_rings_wobble.png) | ![](app/docs/vital_warp.png) |
-| ![](app/docs/vital_env_live.png) | ![](app/docs/vital_lfo_live.png) | ![](app/docs/vital_assign_osc.png) |
-
-Vital 的介面有四個招牌，0.2 都搬了過來：
-
-1. **調變環**：
-   - Vital 的每顆旋鈕外圈有紫色的弧，表示被調變的範圍。PRISM-1 的參數條下面多了一條紫線，表示調變矩陣能把它推多遠，也就是所有指向這個目的地的槽 |amount| 的總和，換算成這條參數條的單位。
-   - 只要有 voice 在發聲，就會有一根白色指標顯示最新 voice 現在的實際值。這個值由引擎的 `SVIEW` 即時提供，每個 render 都更新。
-   - 所以 LFO 調 cutoff 時，可以看到白色指標在紫色範圍裡來回跑。
-2. **拖放指派調變**：
-   - Vital 是把 ENV / LFO 拖到旋鈕上。FM-1 沒有觸控，所以改成：在 ENV1–3 或 LFO1–2 頁按 ARP，就「撿起」這個來源。
-   - 撿起後，ARP 燈會閃，畫面底部出現紫色橫幅「LFO1 > TURN A KNOB」，可以被調變的參數標籤變成紫色，來源的頁籤也變紫色。
-   - 接著到任何一頁轉任何一顆可調變的旋鈕：會自動找到或建立一個「LFO1 → 該參數」的調變槽，旋鈕調的是調變量而不是參數本身，提示會顯示「LFO1  CUTOFF +24」。
-   - 再按一次 ARP 放下，或 10 秒沒動作會自動放下。不是來源頁時，ARP 還是跳到 MATRIX 頁。
-3. **Wavetable 堆疊視圖**：
-   - 8 幀從後往前斜著疊起來，靠近播放位置的那幀稍微亮一點。
-   - 播放中的波形用青綠色畫在它實際的（被調變後的）幀位置上，已經套用了目前的 warp，畫的就是 voice 實際聽到的相位扭曲。warp 的公式和引擎相同，只是 FM / RM 需要另一個振盪器，所以不畫。
-   - 左下角顯示 warp 名稱（青綠）和 spectral morph 名稱（紫），右下角顯示「幀 x/8」。
-4. **即時游標和 Vital 的外觀**：
-   - 包絡頁：最新 voice 的電平是一條線和一個點。LFO 頁：一個點跟著相位跑。
-   - 配色是深藍灰底、青綠表示數值、紫色表示調變（在 app.c 裡重新定義了 gfx.c 的配色巨集）。
-   - 標題列是 Vital 式的「< 預設名 >」（未存時加 `*`），還有 CPU 和輸出電平表。
-   - 有 voice 在發聲時，上半部約 12 fps、下半部約 8 fps，所以白色指標會動。
-
-## Vital 與 PRISM-1 的對照
-
-| | Vital | PRISM-1 | 原因 |
+| | 0.2 | 1.0 | Vital |
 |---|---|---|---|
-| 複音 | 1–32（預設 8）| 1–6 | CPU |
-| 振盪器 | 3 個 wavetable + 1 個 sampler | 2 個 wavetable + noise | CPU |
-| Wavetable | 每幀 2048 sample、257 幀；每個 voice 每個 block（≤128 sample）都由頻譜做 IFFT 重建 | 每幀 256 sample、8 幀、6 層 mip（256→8 sample）；頻譜在主迴圈轉成時域表 | RAM 和 CPU |
-| 內建表 | 使用者自製 / 匯入 | 6 組：BASIC（sine→tri→square→saw）、PULSE、FORMANT（母音 A E I O U）、HARMONIC、ORGAN（拉桿）、DIGITAL | |
-| Spectral morph | 11 種，每個 voice 都可調變 | 8 種（LOW PASS、HIGH PASS、FORMANT、STRETCH、SMEAR、RANDOM、DISPERSE、SHEPARD），整張表一次算，**不能**被 voice 調變 | 每個 voice 都做 IFFT 太貴 |
-| Phase warp（Vital 叫 distortion）| SYNC、FORMANT、QUANTIZE、BEND、SQUEEZE、PULSE、FM/RM ← A/B/sample | 前 6 種照 Vital 公式；FM/RM 是 A↔B（B 用 A 當下的 sample，A 用 B 上一個 sample）| |
-| Unison | 1–16，多種 stack style | 1–3，對稱 detune、立體聲 spread | CPU |
-| 濾波器 | 2 個（串聯 / 並聯），8 種 model | 1 個：ANALOG（SVF + tanh drive）、LADDER（4 極、回授 tanh）、FORMANT（3 個 band，AOIE / AIUO）、COMB（正 / 負回授）；12 / 24 dB；Vital 的 BLEND（low → band → high）| CPU |
-| 包絡 | 6 個 DAHDSR，power 曲線 | 3 個 DAHDSR，用 Vital 的 `powerScale` 曲線和四次方時間（v⁴ 秒）；ENV1 = 音量 | |
-| 音量律 | (ENV1 × lerp(1, vel, veltrack))² | 相同 | |
-| LFO | 8 個，可畫形狀，6 種 sync 模式 | 2 個：7 種形狀（含 S&H、SMOOTH random）、TRIGGER / FREE / ENVELOPE；Vital 的 smooth（半衰期一階平滑）| |
-| 調變 | 64 槽，含 power、bipolar、stereo、remap | 8 槽：來源 11 種 × 目的 17 種，amount ±100 | |
-| 效果 | 9 種、可重新排序 | 7 種，照 Vital 的預設順序：CHORUS → COMPRESSOR（單頻段、上下壓縮）→ DELAY → DISTORTION（Vital 的 6 種）→ FLANGER → PHASER → REVERB（4 線 FDN）| RAM |
-| Oversampling | 2× | 無 | CPU |
+| Voices | 6，單核 | **8，兩顆核心各算一半**；unison 預算依 CPU 自動調整 | 1–32 |
+| Wavetable 振盪器 | 2 | **3**，每個 unison 1–8，Vital 的 11 種堆疊、detune power、blend、stereo、frame spread、phase / random phase | 3，unison 1–16 |
+| Wavetable | 6 張 × 8 幀 | **35 張 × 32 幀**，每幀 6 層 mip | 使用者自製 |
+| Warp | 8 | **13**（sync、formant、quantize、bend、squeeze、pulse、FM / RM ← 另兩個振盪器或 sampler）| 13 |
+| Spectral morph | 8 | **12**（Vital 全部）| 12 |
+| Sampler 振盪器 | 噪音 | **17 種**：5 種即時噪音（白、粉紅、棕、黑膠、磁帶）+ 12 段存在快閃的合成取樣（呼吸、人聲 aah、拉弦、撥弦、玻璃、金屬、鼓…）| 載入音檔 |
+| 去處 | 濾波器 / 直出 | **FILTER 1 / FILTER 2 / 兩個 / 只過效果 / 直出** | 相同 |
+| 濾波器 | 1 個，4 種 | **2 個，串聯或並聯，Vital 的 8 種 model、全部 style**（analog、dirty、ladder、digital、diode、formant、comb、phaser）| 相同 |
+| 包絡 | 3 | **6** DAHDSR，Vital 的時間律和 3 條 power 曲線 | 6 |
+| LFO | 2 | **8**，9 種形狀 + **手繪 16 點**（每段有曲率），Vital 的 6 種 sync 模式，fade、delay、smooth、phase | 8 |
+| 隨機 LFO | 無 | **4**：perlin、S&H、sine、lorenz | 4 |
+| Macro | 無 | **4** | 4 |
+| 調變矩陣 | 8 槽 | **32 槽**：amount、bipolar、power 曲線、bypass；幾乎所有連續參數（共 375 個參數）都能被調變，包括效果 | 64 |
+| 效果 | 7 種固定順序 | **9 種、可重新排序**（chorus、OTT 式三頻段 compressor、delay 4 種、distortion 6 種 + 濾波器、3 段 EQ、filter、flanger、phaser、8 線 FDN reverb）| 9 |
+| 音色 | 8 個出廠 | **24 個出廠 + 46 個使用者槽**（快閃），編輯中的音色斷電後保留 | |
+
+## 架構
+
+```
+ keys / MIDI ─► 指令環 ─┐                     main loop：UI、wavetable 分步建表（每步 ≤ 2 ms）、存檔
+                         ▼
+ audio IRQ ─► core_render，每 32 frame 一個控制週期：
+   每個 voice（偶數在 core 0，奇數在 core 1）：
+     調變源（6 ENV、8 LFO、4 RANDOM、macro、velocity、pressure、note、wheel、bend、random）
+     → 32 槽矩陣 → 所有被調變的參數
+     → SMP、OSC 1–3（unison、warp；FM / RM 讀另一個振盪器這一塊或上一塊的輸出）
+     → 各自的去處 → FILTER 1、FILTER 2（串 / 並；單聲道的 voice 只算一個聲道）
+     → × (ENV 1 × 力度)²（Vital 的音量律）
+   全部 voice 加總 → 9 個效果依 patch 的順序（參數被「最新的 voice」調變，同 Vital）→ 音量 → tanh
+```
+
+- `app/dsp/params.h`：375 個參數的表（名稱、種類、範圍、預設、能否被調變、per-voice 或全域）。矩陣、旋鈕的調變環、存檔都用這張表。
+- `app/dsp/core.c`、`mod.inc`：voice、調變源、矩陣、路由、雙核心 render。
+- `app/dsp/wt.c`、`osc.c`：35 張表的配方、12 種 morph、mip、振盪器、sampler。
+- `app/dsp/filt.c`：8 種濾波器。`app/dsp/fx.c`：9 種效果。
+- `app/presets.inc`：24 個出廠音色，用秒、Hz、半音寫成配方。
+- `app/ui_*.inc`：頁面、格式、圖形、輸入、外框。
+- `tools/gen_samples.py`：sampler 的 12 段取樣（合成產生，存成快閃常數）。
 
 ## 操作
 
-| FM-1 控制 | 作用 |
+| 按鈕 | 作用 |
 |---|---|
-| SELECT 編碼器 | 換頁：A、B、F（濾波器）、E1、E2、E3、L1、L2、M（矩陣）、FX、V（voice）|
-| ALGORITHM 編碼器 | 這一頁的第幾列（畫面左下角的小點）|
-| K1–K4 | 這一列的 4 個參數（按住 GLO 微調）|
-| PRESET 編碼器 | 出廠音色：INIT、SUPERSAW、WARP BASS、VOWEL PAD、FM BELL、PLUCK、WOBBLE、ORGAN |
-| SEL | OSC A ↔ OSC B |
-| EDIT | FILTER |
-| ENV | ENV1 → ENV2 → ENV3 |
-| LFO | LFO1 ↔ LFO2 |
-| ARP | MATRIX |
-| FX | EFFECTS（再按一次換下一個效果）|
-| HOME | VOICE（複音數、glide、velocity tracking、音量）|
-| SAVE | 存目前的音色；有未存的變更時燈會亮，畫面上音色名稱旁會出現 `*` |
-| REC | 全部音符關閉 |
-| OCT− / OCT+ | 八度 |
-| 鍵盤 | 有力度（`APP_TOUCH`），按壓力道 = 矩陣裡的 PRESSURE 來源 |
-| MIDI in | 音符、CC1 → MOD WHEEL、channel pressure、pitch bend ±2、CC74 cutoff、CC71 resonance |
+| SEL | OSC 1 → OSC 2 → OSC 3 → SAMPLE（GLO：這一個開 / 關）|
+| EDIT | FILTER 1 / FILTER 2（GLO：開 / 關）|
+| ENV | ENV 1 … 6 |
+| LFO | LFO 1 … 8（GLO：RANDOM 1 … 4）|
+| SEQ | MATRIX |
+| FX | EFFECTS（在效果頁再按：選中的效果開 / 關）|
+| HOME | MACROS ↔ VOICE |
+| **ARP** | **撿起這一頁的調變源**（ENV、LFO、RANDOM、MACRO），之後轉**任何**一顆旋鈕就是在設定這個來源對它的調變量；再按一次放下 |
+| PLAY | hold（sustain）|
+| REC | 全部音符關閉（GLO + 按住 1 秒：INIT 新音色）|
+| SAVE | 存：使用者音色存回原槽；出廠音色存到下一個空槽（GLO：一定存成新的；按住：說明）|
+| OCT− / OCT+ | 八度（GLO：上一頁 / 下一頁）|
+| SELECT 編碼器 | 這一頁的主選項：wavetable、取樣、濾波器 model、LFO 形狀、隨機樣式、矩陣槽、效果（在效果頁按住 GLO：把效果在鏈中前後移動）|
+| ALGORITHM 編碼器 | 這一頁的第幾列（標題列的小點）|
+| PRESET 編碼器 | 出廠音色，接著是使用者音色（有未存的修改時，第一下只會提醒）|
+| K1–K4 | 這一列的四個參數（GLO：微調；快轉會加速）|
+| 鍵盤 | 力度和壓力（壓力是矩陣的 PRESSURE 來源）|
+| MIDI in | 音符、CC1 mod wheel、CC64 sustain、channel pressure、pitch bend、CC74 / CC71 = FILTER 1 cutoff / resonance |
 
-### 每一頁的參數
-- **OSC A / B**：
-  - WAVE 列：TABLE、FRAME、WARP、WARP AMT
-  - SPECTRUM 列：MORPH、MORPH AMT、LEVEL、OUT（FILTER / DIRECT）
-  - UNISON 列：VOICES、DETUNE、SPREAD、TRANSPOSE
-- **FILTER**：
-  - MODEL、STYLE、CUTOFF、RESONANCE
-  - DRIVE、BLEND、KEYTRACK、NOISE
-- **ENV 1–3**：
-  - ATTACK、DECAY、SUSTAIN、RELEASE
-  - DELAY、HOLD、ATK CURVE、D/R CURVE
-- **LFO 1–2**：SHAPE、RATE、MODE、SMOOTH
-- **MATRIX**：8 列（槽），每列 SOURCE、DEST、AMOUNT
-- **EFFECTS**：7 列（各一個效果），每列 ON / TYPE 和 2–3 個參數
-- **VOICE**：POLYPHONY、GLIDE、VEL TRACK、VOLUME
+### 畫面（Vital 的樣子：深藍灰底、青綠是數值、紫色是調變）
+- **旋鈕**：青綠色弧是數值；外圈紫色弧是調變的可及範圍；白色刻度是最新 voice 正在聽到的值。撿起來源時，可被調變的旋鈕標籤變紫，數值改顯示調變量。
+- **OSC**：32 幀的 3D 堆疊（每隔一幀畫一條），正在播的那幀用青綠色畫在它實際的（被調變後的）位置，而且已經套用 warp；右下是 unison 的展開。按住 GLO 改看這一幀的頻譜。
+- **FILTER**：頻率響應曲線、cutoff / resonance 的點、cutoff 的調變範圍（紫）和 voice 正在用的曲線（白）；formant 有母音平面；右上角顯示哪些振盪器送進來、串聯或並聯。
+- **ENV / LFO**：曲線加上最新 voice 的位置點；LFO 的 DRAW 列逐點改高度、曲率，或把目前的形狀轉成可畫的點。
+- **RANDOM**：最近的軌跡。**MATRIX**：每頁 7 槽，來源、目的地、amount 條、來源的即時值。**MACROS**：四個大旋鈕和它們的目的地。
+- **EFFECTS**：9 格的效果鏈（亮的是開著的），下方是選中效果的圖：EQ / FILTER 的響應、compressor 三頻段的電平與增益、delay 的回聲、distortion 的轉移曲線、reverb 的衰減、chorus / flanger / phaser 的掃動。
+- **VOICE**：8 個 voice 的音高、CPU、目前的 unison 預算。
 
-畫面上半部會依頁面畫出對應的圖：
-- **OSC 頁**：wavetable 目前的幀，後面兩幀淡淡疊在後面
-- **ENV 頁**：DAHDSR 曲線
-- **LFO 頁**：LFO 波形
-- **FILTER 頁**：二階濾波器的頻率響應
-- **MATRIX 頁**：8 個槽的列表
-- **EFFECTS 頁**：效果鏈
-- **VOICE 頁**：每個 voice 是否在發聲
+## 把 FM-1 用到滿：先堆、再減
 
-右上角顯示 CPU %（`plat_cpu_pct`）和音色名稱。
+第一次實機編譯時 SRAM 超出 **162 KB**。按「聽起來損失最小」的順序做減法：
 
-## 程式結構
+| 減法 | 省下 | 代價 |
+|---|---|---|
+| delay 的線 2 × 32768 → 2 × 16384 | 64 KB | 最長延遲 1.49 s → 0.74 s（超過 0.37 s 自動半取樣率）|
+| reverb 的線 32768 → 16384 | 32 KB | 最大房間 0.7 → 0.3 倍 Vital 的線長，pre-delay 最長 136 ms；decay 仍可到 64 s |
+| 濾波器 comb 延遲線 1024 → 512 | 32 KB | comb 最低音高 43 Hz → 86 Hz |
+| sampler 素材從 RAM 搬到快閃（編譯時產生）| 28 KB | 無（反而從 5 段增加到 12 段）|
+| 全域調變改稀疏、即時值改 uint16、隨機軌跡改 uint8 | 2.2 KB | 無 |
+| 設定檔借用存檔的 sector 緩衝 | 1.3 KB | 無 |
+| 主 / 中斷堆疊照靜態分析定為 6400 / 4352 B | — | 最壞 4960 / 3108 B，留有邊際 |
 
-```
-app/synth.c, synth.h   引擎：voice 配置、振盪器 + warp、濾波器、包絡、LFO、矩陣、效果。在 FM-1 上從 RAM 執行（PLAT_RAM_CODE，22.9 KB）
-app/wt.c, wt.h         wavetable：頻譜配方 → spectral morph → 6 層 mip 的反 DFT（主迴圈，每張表約 69 萬次乘加）
-app/app.c, app.h       面板：頁面 / 列 / 參數表、圖形、出廠音色、wavetable 重建（每秒最多 25 次，雙緩衝）、存檔
-app/tests/basic.txt    功能測試（複音、偷 voice、頁面、存檔重開）
-app/tests/sounds.txt   8 組出廠音色各彈一次，並檢查有聲音（錄成 demo）
-app/tests/stress.txt   最壞情況的 CPU 量測
-```
+一度把 wavetable 減到 24 幀；sampler 搬去快閃後，省下的 RAM 又把它加回 32 幀。
 
-- 執行緒：主迴圈擁有 `patch_t`（126 個 uint16，用雙緩衝槽交接）和 wavetable（每個振盪器兩份緩衝，換 table 時只換指標）；按鍵走一個 64 格的環形佇列；其餘全部在 audio interrupt 裡。
-- 控制率：每個 voice 每 16 個 sample 算一次包絡、LFO、矩陣、音高、mip level 和濾波器係數；ENV1 在每個 sample 之間線性內插。
-- 超載保護：`APP_OVERLOAD`（render 超過預算的 90 %）→ 砍掉最舊的 voice（優先砍已經放開的）。
+最後的用量（`./build.sh --release 1.0`）：
 
-## 編譯（2026-11-06 實測）
+| | 用量 | 上限 |
+|---|---|---|
+| 快閃映像 | 526 KB（其中取樣 288 KB）| 581.5 KB |
+| SRAM | 488.3 KB：RAM 程式碼 67 KB、.data+.bss 65 KB、pool 356 KB（4 張 wavetable 緩衝 129 KB、16 個濾波器 69 KB、效果 104 KB…）| 496.6 KB（剩 8.3 KB，build 規定至少 8 KB）|
+| 快閃資料區 XDATA1 | 46 個使用者音色 | 全部 |
+
+## 審視後的改進
+
+- **濾波器的 CPU**：Vital 的濾波器拓撲每個樣本比預算重 2–4 倍。所以沒有立體聲展開、pan 置中、也沒有調變去動 pan 的音色，濾波器只算一個聲道再複製，成本減半；bass、lead、pluck 大多是這類。
+- **Unison 預算**：每個新音都會算它要幾個振盪器聲部；超出預算就偷最舊的 voice。render 晚了（`APP_OVERLOAD`）預算縮小；CPU 低於 60% 時每秒慢慢放寬。所以 SUPERSAW 這種 7+3 聲的音色不會讓機器卡住，只是同時發聲數變少。
+- **FM 的來源取音量之前的訊號**：跟 Vital 一樣，把調變用的振盪器音量關到 0，它仍然會去 FM 別的振盪器（FM BELL 就是這樣做的）。
+- **音色響度一致**：逐一量每個出廠音色一段樂句的 RMS，再補償音量，RMS 落在 0.014–0.034。
+- **不會誤丟編輯**：有未存的修改時轉 PRESET，第一下只提醒。
+- **矩陣的目的地顯示區段**：例如「F1 CUTOFF」、「O2 FRAME」。
+
+## 編譯與測試（2026-11-07）
+
 環境同 `../fm1-hello/README.md`。
 
 ```sh
-./build.sh --host && app/build/host/prism-1_host app/tests/basic.txt app/build/host
-./build.sh --release 0.1            # → app/build/prism-1-0.2.fwsc
-./build.sh --rfm1 --release 0.1     # → app/build/prism-1-0.2.rfm1（先 commit）
-node base/tests/rfm1_test.mjs app/build/prism-1-0.2.rfm1
+./build.sh --host
+app/build/host/prism-1_host app/tests/basic.txt app/build/host    # 冒煙測試
+app/build/host/prism-1_host app/tests/sounds.txt app/build/host   # 24 個音色，錄成 sounds.wav
+app/build/host/prism-1_host app/tests/stress.txt app/build/host   # 最壞情況
+./build.sh --release 1.0 && ./build.sh --rfm1 --release 1.0
+node base/tests/rfm1_test.mjs app/build/prism-1-1.0.rfm1
 ```
 
-### 實測結果
-- **host 模擬器**：`basic.txt`、`sounds.txt`、`stress.txt` 全部 ok（6 voices 同時發聲、第 7 個音會偷 voice、8 組音色都有聲音、沒有削波）。
-- **`.fwsc`**：app 139,656 B；`.app_ram` 22,856 B（`.ram_text` 共 27,820 / 32,768 B）；`.data+.bss` 35,572 / 98,304 B；pool 319,112 / 344,064 B。fm1-base 的檢查全部 ok。
-- **`.rfm1`**：171,116 B，8 MiB。`rfm1_test.mjs` 全部 ok，FM1VST 的 `rfm1_check.py` 也 ok，授權欄位是 GPL-3.0-only。
+`basic.txt` 涵蓋：
+- 和弦、偷 voice（第 9 個音）
+- 每一頁的截圖
+- 撿起 LFO 1 指派給 cutoff
+- 效果開關與重排
+- 存進使用者槽後重開機還在
 
-### CPU（**只是估算，沒有實機數據**）
-| 情境 | host 負載（2.1 GHz Xeon）| FM-1 粗估（×15–25）|
-|---|---|---|
-| 閒置 | 0.0 % | ~0 % |
-| INIT，6 voices | 1.2 % | 約 20–30 % |
-| 最壞情況：SUPERSAW（兩個振盪器各 3 unison、立體聲）+ FORMANT 濾波器 + 7 個效果全開，6 voices | 約 4 % | 約 60–100 %，可能會觸發砍 voice |
+DSP 的各部分另外在桌機的 harness 上測過：
+- **wavetable**：每張表都建得出來；mip 層級沒有超過上限的泛音；morph 和 warp 量為 0 時與不套逐位元相同；unison 1–8 聲音量都在單聲的 ±3% 內。
+- **濾波器**：每種 model × style 在快速調變下都穩定，沒有 zipper；響應與實測相符。
+- **效果**：參數極端值都穩定，各效果都產出了 demo。
 
-倍率只是經驗猜測，實際要在 FM-1 上看畫面右上角的 CPU %，或用 fm1-emu 的 `FM1_STRICT=1`（照實測的指令週期數跑）量。
-
-### 移植時踩到的坑
-- `.ram_text` 只有 32 KB。一開始把 `osc_run`、`filter_tick` 強制 inline，結果複製了好幾份，超出 728 B；改成 `noinline` 的 RAM 函式後是 22.9 KB。
-- `patch_t` 要被逐 word 複製，大小必須是 4 的倍數（`_Static_assert` 擋下了 127 個 uint16 的版本）。
-- Vital 的時間是四次方對應，attack 參數 650 就是 2.6 秒；出廠音色要用換算後的值來設。
-- 其他規則同 CHAIN-1：RAM code 不能呼叫 flash；fastmath 要強制 inline；加 `-fno-builtin`；從 flash 呼叫 RAM 函式要用 `PLAT_FAR`。
-
-## 下一步（還沒做）
-1. 實機量 CPU；如果不夠，用 fm1-base 的第二核心（`cpu2 = true`、`plat_cpu2_run`）分攤一半的 voice。
-2. 讓 spectral morph 可以被 voice 調變（例如只對目前的幀做小尺寸 IFFT）。
-3. 第三個振盪器、第二個濾波器（串聯 / 並聯）、使用者匯入 wavetable。
-4. 多個使用者音色槽。
-
-## 安裝
-- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/prism-1-0.2.rfm1`
-- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/prism-1-0.2.fwsc`
+### 已知限制
+- spectral morph 是整張表一起套用（主迴圈分步重建），**不能**被 voice 調變；Vital 是每個 voice 用 FFT 即時算。
+- 沒有 oversampling；高音區的 wavetable 有線性內插的鏡像（C7 約 −28 dB）。
+- 濾波器和效果的拓撲照 Vital 縮小，個別有差異：dirty 的 cutoff 上限 14 kHz、ladder 只在輸入飽和、reverb 8 條線。
+- CPU 用量是依指令數估算的，**還沒有實機數據**；音色只在模擬器上聽過。

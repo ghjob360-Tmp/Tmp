@@ -871,7 +871,7 @@ RAMC void core_render(int32_t *lr, uint32_t n, float gain)
             for (k = 0; k < 4; k++) {
                 for (j = 0; j < 31u; j++)
                     CORE_VIEW.rnd_hist[k][j] = CORE_VIEW.rnd_hist[k][j + 1u];
-                CORE_VIEW.rnd_hist[k][31] = newest >= 0 ? V[newest].rnd[k].out : CORE_VIEW.rnd_hist[k][31];
+                CORE_VIEW.rnd_hist[k][31] = newest >= 0 ? (uint8_t)(clampf(V[newest].rnd[k].out, 0.0f, 1.0f) * 255.0f) : CORE_VIEW.rnd_hist[k][31];
             }
         }
     }

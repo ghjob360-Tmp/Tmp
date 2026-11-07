@@ -40,7 +40,7 @@ typedef struct {
     float env_stage[6];                  /* the envelopes: stage (0 delay 1 attack 2 hold 3 decay 4 sustain 5 release
                                             6 off) + the time in it (0..1) */
     float lfo_ph[8];                     /* the LFOs' phase (0..1, the shape's x) */
-    float rnd_hist[4][32];               /* the random LFOs' recent values, newest last */
+    uint8_t rnd_hist[4][32];             /* the random LFOs' recent values (0..255), newest last */
     float frame[NOSC];                   /* the oscillators' frame (modulated) */
     float out_peak, out_l, out_r;
     float cpu;                           /* the render's share of its time (0..1) */
