@@ -33,7 +33,9 @@ static int nvd, ngd;
 static uint32_t src_used;                /* the sources the matrix reads (bit per MS_*) */
 static uint8_t o_on[NOSC], s_on, flt_on[2];
 static int fx_was_on[FXT_N];
-static float gm[NPARAM];                 /* the global modulation (effects, volume) */
+static float gmv[NSLOT];                 /* the global modulation (effects, volume): a value per destination ... */
+static uint8_t gix[NPARAM];              /* ... found by the parameter (index + 1; 0 none) */
+INL float gmod(int id) { return gix[id] ? gmv[gix[id] - 1u] : 0.0f; }
 
 static const wt_t *volatile tab[NOSC];   /* the tables (main loop: core_table) */
 static const wt_t *volatile tab_used[NOSC][2];   /* what the render read last and the block before */
@@ -321,6 +323,8 @@ static RAMC void take_input(void)
         p_have = 1;
         for (i = 0; i < NPARAM; i++)
             pn[i] = PDESC[i].kind == PK_CHOICE ? (float)PT.v[i] : (float)(PT.v[i] > 1023u ? 1023u : PT.v[i]) * (1.0f / 1023.0f);
+        for (i = 0; i < ngd; i++)
+            gix[gdst[i]] = 0;
         nvs = ngs = nvd = ngd = 0;
         src_used = 1u << MS_ENV1;
         for (i = 0; i < NSLOT; i++) {
@@ -345,8 +349,10 @@ static RAMC void take_input(void)
                 gsl[ngs++] = c;
                 for (j = 0; j < ngd; j++)
                     dup |= gdst[j] == m->dst;
-                if (!dup)
+                if (!dup) {
                     gdst[ngd++] = m->dst;
+                    gix[m->dst] = (uint8_t)ngd;
+                }
             }
         }
         for (k = 0; k < NOSC; k++)
@@ -732,9 +738,9 @@ RAMC void core_render(int32_t *lr, uint32_t n, float gain)
                 s = s0;
             }
             for (k = 0; k < ngd; k++)
-                gm[gdst[k]] = 0.0f;
+                gmv[k] = 0.0f;
             for (k = 0; k < ngs; k++)
-                gm[gsl[k].dst] += src_val(s, &gsl[k]);
+                gmv[gix[gsl[k].dst] - 1u] += src_val(s, &gsl[k]);
         }
         /* the effect chain, in the patch's order */
         for (k = 0; k < FXT_N; k++) {
@@ -749,12 +755,12 @@ RAMC void core_render(int32_t *lr, uint32_t n, float gain)
                 continue;
             for (pi = 0; pi < FX_NP; pi++) {
                 int id = P_FX(t) + 1 + pi;
-                fxp[pi] = clampf(pn[id] + gm[id], 0.0f, 1.0f);
+                fxp[pi] = clampf(pn[id] + gmod(id), 0.0f, 1.0f);
             }
             fx_run(t, fxp, tempo, L, R, m);
         }
         {
-            float vol = clampf(pn[P_V_VOLUME] + gm[P_V_VOLUME], 0.0f, 1.0f);
+            float vol = clampf(pn[P_V_VOLUME] + gmod(P_V_VOLUME), 0.0f, 1.0f);
             vol = vol * vol * 1.4f;
             for (j = 0; j < m; j++) {
                 float l = fm_tanhf((L[j] + DL[j]) * vol), r = fm_tanhf((R[j] + DR[j]) * vol);
@@ -787,7 +793,7 @@ RAMC void core_render(int32_t *lr, uint32_t n, float gain)
                     CORE_VIEW.src[k] = v->src[k];
                 matrix_voice(v->src, vmod[0]);
                 for (k = 0; k < nvd; k++)
-                    CORE_VIEW.live[vdst[k]] = pv(vmod[0], vdst[k]);
+                    CORE_VIEW.live[vdst[k]] = (uint16_t)(pv(vmod[0], vdst[k]) * 65535.0f);
                 for (k = 0; k < 6; k++) {
                     float pr[9];
                     int q;
@@ -801,7 +807,7 @@ RAMC void core_render(int32_t *lr, uint32_t n, float gain)
                     CORE_VIEW.frame[k] = pv(vmod[0], P_OSC(k, FRAME));
             }
             for (k = 0; k < ngd; k++)
-                CORE_VIEW.live[gdst[k]] = clampf(pn[gdst[k]] + gm[gdst[k]], 0.0f, 1.0f);
+                CORE_VIEW.live[gdst[k]] = (uint16_t)(clampf(pn[gdst[k]] + gmv[k], 0.0f, 1.0f) * 65535.0f);
         }
     }
     {                                    /* the random LFOs' traces, about 40 a second */

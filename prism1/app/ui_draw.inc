@@ -118,7 +118,7 @@ static void draw_bottom(void)
                 v = (float)pt.v[c] / 1023.0f;
                 mod_reach(c, &lo, &hi);
                 if (hi > lo && CORE_VIEW.active)
-                    live = CORE_VIEW.live[c];
+                    live = (float)CORE_VIEW.live[c] * (1.0f / 65535.0f);
             }
             (void)n;
             dial(i, v, d->kind == PK_BIP, lo, hi, live, param_name(c), t, pick);

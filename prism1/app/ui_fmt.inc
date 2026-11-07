@@ -246,7 +246,7 @@ static const fxf_t FXF[FXT_N][FX_NP] = {
     /* PHASER */ {{FF_HZ, 0, 0, 0, 0}, {FF_SYNC, 14, 0, 0, 0}, FP, {FF_NOTE, 0, 0, 0, 0}, FP, FP, FP, FP, FP, FP, FP,
                   FP},
     /* REVERB */ {FP, {FF_SEC, 0, 0, 0, 0}, {FF_NOTE, 0, 0, 0, 0}, {FF_NOTE, 0, 0, 0, 0}, {FF_NOTE, 0, 0, 0, 0},
-                  {FF_DB, 0, -6, 0, 0}, FP, {FF_HZ, 0, 0, 0, 0}, {FF_MS, 0, 0, 300, 0}, FP, FP, FP}};
+                  {FF_DB, 0, -6, 0, 0}, FP, {FF_HZ, 0, 0, 0, 0}, {FF_MS, 0, 0, 136, 0}, FP, FP, FP}};
 
 static int sel_of(uint16_t v, int n)     /* a 0..1023 knob as one of n */
 {

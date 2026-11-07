@@ -35,18 +35,18 @@
 const char *const FXT_NAME[FXT_N] = {"CHORUS", "COMP", "DELAY", "DIST", "EQ", "FILTER", "FLANGER", "PHASER", "REVERB"};
 const int FXT_NP[FXT_N] = {10, 8, 9, 7, 12, 9, 7, 8, 10};
 const char *const FXT_PNAME[FXT_N][FX_NP] = {
-    {"voices", "rate", "sync", "depth", "delay 1", "delay 2", "feedback", "cutoff", "spread", "mix"},
-    {"bands", "attack", "release", "low gain", "band gain", "high gain", "amount", "mix"},
-    {"style", "time", "sync", "time 2", "sync 2", "feedback", "cutoff", "spread", "mix"},
-    {"type", "drive", "filter", "cutoff", "reso", "blend", "mix"},
-    {"low mode", "low cut", "low gain", "low reso", "band mode", "band cut", "band gain", "band reso", "high mode",
-     "high cut", "high gain", "high reso"},
-    {"model", "style", "cutoff", "reso", "drive", "blend", "x", "y", "mix"},
-    {"rate", "sync", "feedback", "center", "depth", "offset", "mix"},
-    {"rate", "sync", "feedback", "center", "depth", "blend", "offset", "mix"},
-    {"size", "decay", "low cut", "high cut", "shelf cut", "shelf gn", "chorus", "chor rate", "pre-delay", "mix"},
+    {"VOICES", "RATE", "SYNC", "DEPTH", "DELAY 1", "DELAY 2", "FEEDBACK", "CUTOFF", "SPREAD", "MIX"},
+    {"BANDS", "ATTACK", "RELEASE", "LOW GAIN", "BAND GAIN", "HIGH GAIN", "AMOUNT", "MIX"},
+    {"STYLE", "TIME", "SYNC", "TIME 2", "SYNC 2", "FEEDBACK", "CUTOFF", "SPREAD", "MIX"},
+    {"TYPE", "DRIVE", "FILTER", "CUTOFF", "RESO", "BLEND", "MIX"},
+    {"LOW MODE", "LOW CUT", "LOW GAIN", "LOW RESO", "BAND MODE", "BAND CUT", "BAND GAIN", "BAND RESO", "HIGH MODE",
+     "HIGH CUT", "HIGH GAIN", "HIGH RESO"},
+    {"MODEL", "STYLE", "CUTOFF", "RESO", "DRIVE", "BLEND", "X", "Y", "MIX"},
+    {"RATE", "SYNC", "FEEDBACK", "CENTER", "DEPTH", "OFFSET", "MIX"},
+    {"RATE", "SYNC", "FEEDBACK", "CENTER", "DEPTH", "BLEND", "OFFSET", "MIX"},
+    {"SIZE", "DECAY", "LOW CUT", "HIGH CUT", "SHELF CUT", "SHELF GN", "CHORUS", "CHOR RATE", "PRE-DELAY", "MIX"},
 };
-const char *const FX_SYNC_NAME[FX_NSYNC] = {"free", "1/1", "1/2", "1/2T", "1/4.", "1/4", "1/4T", "1/8.", "1/8",
+const char *const FX_SYNC_NAME[FX_NSYNC] = {"FREE", "1/1", "1/2", "1/2T", "1/4.", "1/4", "1/4T", "1/8.", "1/8",
                                              "1/8T", "1/16.", "1/16", "1/16T", "1/32"};
 static const float SYNC_BEATS[FX_NSYNC] = {0.0f, 4.0f, 2.0f, 4.0f / 3.0f, 1.5f, 1.0f, 2.0f / 3.0f, 0.75f, 0.5f,
                                            1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f};

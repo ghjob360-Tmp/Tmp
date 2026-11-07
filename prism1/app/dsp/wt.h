@@ -34,18 +34,16 @@
  *  the sample oscillator's.
  *
  * ---- the sample oscillator (osc.c, RAMC) ----
- * Plays a sample keytracked or fixed pitch, looped or not, with level and pan. The factory set (SMP_NFACT
- * sources: noises (white, pink, brown: these may be computed live rather than stored), and short generated loops
- * and hits: vinyl crackle, breath, tape hiss, metallic hits, a sub thump, ...) is generated at boot by smp_init
- * into RAM, SMP_RAM bytes at most in all. It also writes mono[] for FM / RM. */
+ * Plays a sample keytracked or fixed pitch, looped or not, with level and pan. The factory set: five noises made live
+ * (white, pink, brown, vinyl crackle, tape hiss) and twelve 16-bit samples synthesized by tools/gen_samples.py into
+ * flash constants (samples.h), read in place by the render. It also writes mono[] for FM / RM. */
 #pragma once
 #include "common.h"
 
-#define WT_FRAMES 24
+#define WT_FRAMES 32
 #define WT_LEVELS 6
 #define WT_SIZE 504u                     /* 256 + 128 + 64 + 32 + 16 + 8 */
 #define WT_HARM 127
-#define SMP_RAM 28672u                   /* bytes: all the factory samples' RAM */
 typedef struct {
     int16_t d[WT_FRAMES][WT_SIZE];       /* 32,256 bytes */
 } wt_t;

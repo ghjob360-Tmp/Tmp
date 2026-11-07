@@ -447,57 +447,19 @@ RAMC void osc_run(osc_state_t *s, const osc_ctl_t *c, const float *src, float *L
 /* ---------------------------------------------------------------------------- the sample oscillator --- */
 /* kinds: 0 data; live: 1 white, 2 pink, 3 brown, 4 vinyl crackle, 5 tape hiss */
 enum { SK_DATA, SK_WHITE, SK_PINK, SK_BROWN, SK_CRACKLE, SK_HISS };
-const int SMP_NFACT = 10;
-const char *const SMP_NAME[10] = {"WHITE", "PINK", "BROWN", "CRACKLE", "TAPE HISS", "BREATH", "METAL HIT",
-                                  "SUB THUMP", "CLICK", "GLASS PING"};
-#define SMP_WORDS (SMP_RAM / 2u)
-static int16_t smp_mem[SMP_WORDS] PLAT_POOL;
-static smp_ref_t smp_tab[10];
+#include "samples.h"                    /* the stored ones: flash constants (tools/gen_samples.py) */
+#define SMP_LIVE 5
+const int SMP_NFACT = SMP_LIVE + SMPD_N;
+const char *const SMP_NAME[SMP_LIVE + SMPD_N] = {"WHITE", "PINK", "BROWN", "CRACKLE", "TAPE HISS", "BREATH",
+                                                 "METAL HIT", "SUB THUMP", "CLICK", "GLASS PING", "VOX AAH", "WIND",
+                                                 "KICK", "SNARE", "HAT", "PLUCK", "BOWED"};
+static smp_ref_t smp_tab[SMP_LIVE + SMPD_N];
 
 RAMC const smp_ref_t *smp_get(int i)
 {
     return &smp_tab[i < 0 ? 0 : i >= SMP_NFACT ? SMP_NFACT - 1 : i];
 }
 
-/* boot: the generated samples (main loop: plain code) */
-static uint32_t g_rng = 0x1234567u;
-static float grnd(void) { return rnd1(&g_rng); }
-/* normalise a run of generated int16 (written with 8x headroom) to a peak of 0.9 */
-static void norm16(int16_t *d, uint32_t n)
-{
-    uint32_t i;
-    int32_t mx = 1;
-    for (i = 0; i < n; i++) {
-        int32_t a = d[i] < 0 ? -d[i] : d[i];
-        if (a > mx)
-            mx = a;
-    }
-    for (i = 0; i < n; i++)
-        d[i] = (int16_t)(int32_t)((float)d[i] * (0.9f * 32767.0f) / (float)mx);
-}
-static int16_t f16(float v)
-{
-    v = clampf(v * 4096.0f, -32767.0f, 32767.0f);   /* generation scale: 8x headroom, then norm16 */
-    return (int16_t)(int32_t)(v + (v >= 0.0f ? 0.5f : -0.5f));
-}
-typedef struct { float b0, b1, b2, a1, a2, z1, z2; } bq_t;
-static void bq_bp(bq_t *q, float hz, float qq, float rate)   /* RBJ band pass (0 dB peak) */
-{
-    float w = FM_TWO_PI * hz / rate, al = fm_sinf(w) / (2.0f * qq), a0 = 1.0f + al;
-    q->b0 = al / a0;
-    q->b1 = 0.0f;
-    q->b2 = -al / a0;
-    q->a1 = -2.0f * fm_cosf(w) / a0;
-    q->a2 = (1.0f - al) / a0;
-    q->z1 = q->z2 = 0.0f;
-}
-static float bq(bq_t *q, float x)
-{
-    float y = q->b0 * x + q->z1;
-    q->z1 = q->b1 * x - q->a1 * y + q->z2;
-    q->z2 = q->b2 * x - q->a2 * y;
-    return y;
-}
 static void ref(int i, int kind, const int16_t *data, uint32_t len, uint32_t ls, uint32_t le, float rate, float root)
 {
     smp_tab[i].kind = kind;
@@ -509,88 +471,16 @@ static void ref(int i, int kind, const int16_t *data, uint32_t len, uint32_t ls,
     smp_tab[i].root = root;
 }
 
-void smp_init(void)
+void smp_init(void)                      /* the table: the live noises, then the samples in flash, read in place */
 {
-    int16_t *m = smp_mem;
-    uint32_t i, n;
     int k;
     ref(0, SK_WHITE, 0, 44100u, 0u, 44100u, SR, 60.0f);
     ref(1, SK_PINK, 0, 44100u, 0u, 44100u, SR, 60.0f);
     ref(2, SK_BROWN, 0, 44100u, 0u, 44100u, SR, 60.0f);
     ref(3, SK_CRACKLE, 0, 44100u, 0u, 44100u, SR, 60.0f);
     ref(4, SK_HISS, 0, 44100u, 0u, 44100u, SR, 60.0f);
-    {   /* BREATH: a loop of breathy noise (two bands, filtered twice round so the loop is seamless), 22.05 kHz */
-        bq_t a, b;
-        n = 5632u;
-        bq_bp(&a, 1500.0f, 0.6f, 22050.0f);
-        bq_bp(&b, 600.0f, 1.5f, 22050.0f);
-        for (k = 0; k < 2; k++) {
-            g_rng = 0x51u;               /* the same noise twice: the second pass starts in the loop's end state */
-            for (i = 0; i < n; i++) {
-                float x = grnd(), env = 0.65f + 0.35f * fm_sinf(FM_TWO_PI * (float)i / (float)n);
-                float y = bq(&a, x) + 0.6f * bq(&b, x);
-                if (k == 1)
-                    m[i] = f16(y * env);
-            }
-        }
-        norm16(m, n);
-        ref(5, SK_DATA, m, n, 0u, n, 22050.0f, 60.0f);
-        m += n;
-    }
-    {   /* METAL HIT: eight inharmonic partials on 392 Hz (G4) and a noise tick, 22.05 kHz */
-        static const float RT[8] = {1.0f, 1.47f, 2.09f, 2.56f, 3.14f, 3.87f, 4.6f, 5.82f};
-        static const float AM[8] = {1.0f, 0.8f, 0.7f, 0.6f, 0.5f, 0.45f, 0.35f, 0.3f};
-        static const float TC[8] = {0.18f, 0.12f, 0.1f, 0.07f, 0.06f, 0.045f, 0.035f, 0.03f};
-        n = 4096u;
-        g_rng = 0x77u;
-        for (i = 0; i < n; i++) {
-            float tt = (float)i / 22050.0f, y = 0.0f;
-            for (k = 0; k < 8; k++)
-                y += AM[k] * fm_expf(-tt / TC[k]) * fm_sinf(FM_TWO_PI * 392.0f * RT[k] * tt + (float)k);
-            y += 0.6f * grnd() * fm_expf(-tt / 0.004f);
-            m[i] = f16(y * fm_minf(1.0f, (float)i / 8.0f));
-        }
-        norm16(m, n);
-        ref(6, SK_DATA, m, n, 0u, n, 22050.0f, 67.0f);
-        m += n;
-    }
-    {   /* SUB THUMP: a sine falling 180 -> 49 Hz (G1), 11.025 kHz */
-        float ph = 0.0f;
-        n = 2048u;
-        for (i = 0; i < n; i++) {
-            float tt = (float)i / 11025.0f, hz = 49.0f + 131.0f * fm_expf(-tt / 0.03f);
-            ph += hz / 11025.0f;
-            ph -= fm_floorf(ph);
-            m[i] = f16(fm_sinf(FM_TWO_PI * ph) * fm_expf(-tt / 0.09f) * fm_minf(1.0f, (float)i / 16.0f));
-        }
-        norm16(m, n);
-        ref(7, SK_DATA, m, n, 0u, n, 11025.0f, 31.0f);
-        m += n;
-    }
-    {   /* CLICK: a few ms of decaying high tone and noise, 44.1 kHz */
-        n = 256u;
-        g_rng = 0x99u;
-        for (i = 0; i < n; i++) {
-            float tt = (float)i / SR;
-            m[i] = f16((fm_sinf(FM_TWO_PI * 3100.0f * tt) + 0.7f * grnd()) * fm_expf(-tt / 0.0012f));
-        }
-        norm16(m, n);
-        ref(8, SK_DATA, m, n, 0u, n, SR, 60.0f);
-        m += n;
-    }
-    {   /* GLASS PING: a free bar's partials on C6, 22.05 kHz */
-        n = 2048u;
-        for (i = 0; i < n; i++) {
-            float tt = (float)i / 22050.0f;
-            float y = fm_sinf(FM_TWO_PI * 1046.5f * tt) * fm_expf(-tt / 0.06f) +
-                      0.5f * fm_sinf(FM_TWO_PI * 1046.5f * 2.756f * tt) * fm_expf(-tt / 0.03f) +
-                      0.3f * fm_sinf(FM_TWO_PI * 1046.5f * 5.404f * tt) * fm_expf(-tt / 0.015f);
-            m[i] = f16(y * fm_minf(1.0f, (float)i / 4.0f));
-        }
-        norm16(m, n);
-        ref(9, SK_DATA, m, n, 0u, n, 22050.0f, 84.0f);
-        m += n;
-    }
+    for (k = 0; k < SMPD_N; k++)
+        ref(SMP_LIVE + k, SK_DATA, SMPD[k].d, SMPD[k].len, SMPD[k].ls, SMPD[k].le, SMPD[k].rate, SMPD[k].root);
 }
 
 RAMC void smp_on(smp_state_t *s, const smp_ctl_t *c)

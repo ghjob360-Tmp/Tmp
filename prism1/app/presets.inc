@@ -204,7 +204,7 @@ static void factory(patch_t *p, int n)
         K_(P_O1_MAMT, 0.8f);
         lfo_(0, LS_SAWUP, 0.08f, 0, LM_SYNC);
         mod_(MS_LFO1, P_O1_FRAME, 0.6f);
-        env_(0, 1.0f, 1.0f, 1.0f, 3.0f);
+        env_(0, 0.35f, 1.0f, 1.0f, 3.0f);
         fx_(FXT_DELAY, 0.35f);
         fx_(FXT_REVERB, 0.55f);
         break;
@@ -264,9 +264,9 @@ static void factory(patch_t *p, int n)
         fx_(FXT_REVERB, 0.45f);
         break;
     case 15:                             /* LORENZ PAD: chaos moving the choir and a random table */
-        osc_(0, "CHOIR", 0.2f, 0.62f);
+        osc_(0, "CHOIR", 0.2f, 0.8f);
         uni_(0, 3, 0.12f, 0.7f, 0.9f);
-        osc_(1, "RANDOM", 0.5f, 0.45f);
+        osc_(1, "RANDOM", 0.5f, 0.6f);
         V_(P_R1_STYLE, 3);
         fp_->v[P_R1_RATE] = lhz_(0.5f);
         mod_(MS_RND1, P_O1_FRAME, 0.7f);
@@ -280,11 +280,11 @@ static void factory(patch_t *p, int n)
         fx_(FXT_REVERB, 0.5f);
         break;
     case 16:                             /* CHIP BLIP: 8-bit tones, quantised, a dotted-eighth echo */
-        osc_(0, "CHIP", 0.5f, 0.65f);
+        osc_(0, "CHIP", 0.5f, 0.92f);
         V_(P_O1_WARP, WARP_QUANTIZE);
         K_(P_O1_WAMT, 0.4f);
         V_(P_F1_ON, 0);
-        env_(0, 0.001f, 0.18f, 0.0f, 0.12f);
+        env_(0, 0.001f, 0.25f, 0.35f, 0.12f);
         env_(1, 0.0f, 0.1f, 0.0f, 0.1f);
         mod_(MS_ENV2, P_O1_FRAME, -0.4f);
         fx_(FXT_DELAY, 0.3f);
@@ -304,7 +304,7 @@ static void factory(patch_t *p, int n)
         fx_(FXT_REVERB, 0.25f);
         break;
     case 18:                             /* CHOIR: six voices of a wide choir, a vowel filter, a big room */
-        osc_(0, "CHOIR", 0.0f, 0.62f);
+        osc_(0, "CHOIR", 0.0f, 0.85f);
         uni_(0, 6, 0.18f, 0.7f, 1.0f);
         flt_(0, FLT_FORMANT, 1, 1000.0f, 0.6f);
         K_(P_F1_FX, 0.3f);
@@ -316,10 +316,10 @@ static void factory(patch_t *p, int n)
         fx_(FXT_REVERB, 0.5f);
         break;
     case 19:                             /* METAL HIT: metal struck, rung through a comb */
-        osc_(0, "METAL", 0.6f, 0.65f);
+        osc_(0, "METAL", 0.6f, 0.9f);
         V_(P_S_ON, 1);
         V_(P_S_SAMPLE, 6);
-        K_(P_S_LEVEL, 0.5f);
+        K_(P_S_LEVEL, 0.75f);
         flt_(0, FLT_COMB, 0, 600.0f, 0.85f);
         env_(0, 0.001f, 1.2f, 0.0f, 0.8f);
         env_(1, 0.0f, 0.3f, 0.0f, 0.2f);
@@ -336,7 +336,7 @@ static void factory(patch_t *p, int n)
         fp_->v[P_R1_RATE] = lhz_(0.25f);
         mod_(MS_RND1, P_O2_FRAME, 0.8f);
         flt_(0, FLT_ANALOG, 0, 5000.0f, 0.15f);
-        env_(0, 1.2f, 2.0f, 0.9f, 3.0f);
+        env_(0, 0.45f, 2.0f, 0.9f, 3.0f);
         fx_(FXT_PHASER, 0.3f);
         fx_(FXT_DELAY, 0.25f);
         fx_(FXT_REVERB, 0.55f);
@@ -387,5 +387,10 @@ static void factory(patch_t *p, int n)
         break;
     default:
         break;
+    }
+    {                                    /* the levels, evened out across the presets (measured: the RMS of a phrase) */
+        static const uint16_t VOL[NFACT] = {760, 780, 900, 940, 900, 940, 760, 740, 1010, 700, 1023, 1023, 700, 830,
+                                            1010, 1023, 1023, 1023, 1023, 1023, 1023, 760, 780, 1023};
+        p->v[P_V_VOLUME] = VOL[n];
     }
 }

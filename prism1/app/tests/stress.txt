@@ -1,0 +1,29 @@
+# the worst case: SUPERSAW (7 + 3 unison), eight notes, every effect on
+wait 1500
+turn PRESET 1
+wait 800
+tap FX
+turn SELECT -1
+tap FX
+turn SELECT -1
+tap FX
+turn SELECT -1
+tap FX
+turn SELECT -1
+tap FX
+turn SELECT -1
+tap FX
+turn SELECT -1
+tap FX
+wait 300
+key 0 down 100
+key 4 down 100
+key 7 down 100
+key 11 down 100
+key 14 down 100
+key 17 down 100
+key 21 down 100
+key 24 down 100
+wait 6000
+expect loud 1
+shot stress.png

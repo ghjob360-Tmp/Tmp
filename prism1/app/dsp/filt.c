@@ -19,18 +19,18 @@
  * R's), then the ramps: NR current values followed by NR per-sample steps, at RB. */
 #include "filt.h"
 
-const char *const FLT_NAME[FLT_N] = {"Analog", "Dirty", "Ladder", "Digital", "Diode", "Formant", "Comb", "Phaser"};
+const char *const FLT_NAME[FLT_N] = {"ANALOG", "DIRTY", "LADDER", "DIGITAL", "DIODE", "FORMANT", "COMB", "PHASER"};
 const int FLT_NSTYLE[FLT_N] = {5, 5, 5, 5, 2, 2, 9, 2};
 const char *const FLT_STYLE_NAME[FLT_N][FLT_MAXSTYLE] = {
-    {"12 dB", "24 dB", "Notch Blnd", "Notch Sprd", "B/P/N"},
-    {"12 dB", "24 dB", "Notch Blnd", "Notch Sprd", "B/P/N"},
-    {"12 dB", "24 dB", "Notch Blnd", "Notch Sprd", "B/P/N"},
-    {"12 dB", "24 dB", "Notch Blnd", "Notch Sprd", "B/P/N"},
-    {"Low Shelf", "Low Cut"},
+    {"12 DB", "24 DB", "NOTCH BLND", "NOTCH SPRD", "B/P/N"},
+    {"12 DB", "24 DB", "NOTCH BLND", "NOTCH SPRD", "B/P/N"},
+    {"12 DB", "24 DB", "NOTCH BLND", "NOTCH SPRD", "B/P/N"},
+    {"12 DB", "24 DB", "NOTCH BLND", "NOTCH SPRD", "B/P/N"},
+    {"LOW SHELF", "LOW CUT"},
     {"AOIE", "AIUO"},
-    {"LoHi Comb", "LoBnd Comb", "Sprd Comb", "LoHi Fl+", "LoBnd Fl+", "Sprd Fl+", "LoHi Fl-", "LoBnd Fl-",
-     "Sprd Fl-"},
-    {"Positive", "Negative"},
+    {"LOHI COMB", "LOBND COMB", "SPRD COMB", "LOHI FL+", "LOBND FL+", "SPRD FL+", "LOHI FL-", "LOBND FL-",
+     "SPRD FL-"},
+    {"POSITIVE", "NEGATIVE"},
 };
 
 #define PRIMED 0x80000000u               /* filt_t.w: the ramps hold this patch's values (else jump to the targets) */

@@ -1,0 +1,625 @@
+# every factory preset: a phrase each (the demo)
+wait 1500
+wav sounds.wav
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200
+turn PRESET 1
+wait 300
+key 7 down 100
+wait 400
+key 7 up
+wait 50
+key 11 down 100
+wait 400
+key 11 up
+wait 50
+key 14 down 100
+wait 400
+key 14 up
+wait 50
+key 19 down 100
+wait 800
+key 19 up
+wait 50
+key 7 down 90
+key 11 down 90
+key 14 down 90
+wait 900
+key 7 up
+key 11 up
+key 14 up
+wait 1200

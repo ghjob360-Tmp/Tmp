@@ -10,7 +10,7 @@ static float live_or(int id)             /* the value the newest voice hears, el
     if (!CORE_VIEW.active || PDESC[id].kind == PK_CHOICE)
         return kv(id);
     mod_reach(id, &lo, &hi);
-    return hi > lo ? CORE_VIEW.live[id] : kv(id);
+    return hi > lo ? (float)CORE_VIEW.live[id] * (1.0f / 65535.0f) : kv(id);
 }
 static void plot_poly(const int32_t *x, const int32_t *y, int n, uint16_t c, int thick)
 {
@@ -66,7 +66,7 @@ static void pic_osc(int k)
     /* the names: table, warp, morph, frame */
     cv_text(4, 23, &FONT_T, pt.v[P_OSC(k, TABLE)] < (uint16_t)WT_NFACT ? WT_NAME[pt.v[P_OSC(k, TABLE)]] : "?", on ? WHITE : G2);
     num_text((int32_t)(fp + 1.5f), s);
-    text_cat(s, " / 24", sizeof s);
+    text_cat(s, " / 32", sizeof s);
     rtext(236, 23, &FONT_T, s, G3);
     if (warp)
         cv_text(4, 131, &FONT_T, WARP_NAME[warp % WARP_N], TEAL);
@@ -87,6 +87,7 @@ static void pic_osc(int k)
         ctext(120, 70, &FONT_T, "OFF  (GLO + SEL)", G3);
 }
 
+enum { SKIND_DATA, SKIND_WHITE, SKIND_PINK, SKIND_BROWN, SKIND_CRACKLE, SKIND_HISS };
 static void pic_smp(void)
 {
     int si = pt.v[P_S_SAMPLE], on = pt.v[P_S_ON] & 1u, i;
@@ -101,10 +102,15 @@ static void pic_smp(void)
                 if (v > a)
                     a = v;
             }
-        } else {                         /* a live noise: its colour as a texture */
-            uint32_t h = (uint32_t)i * 2654435761u ^ (uint32_t)(ui_t * 8.0f) * 40503u;
-            float w = (float)((h >> 8) & 255u) / 255.0f;
-            a = r && r->kind == 3 ? 0.3f + 0.3f * w * 0.5f : r && r->kind == 2 ? 0.25f + 0.45f * w : 0.2f + 0.7f * w;
+        } else {                         /* a live noise: a moving texture, rougher for white, smoother for brown */
+            uint32_t h = ((uint32_t)i * 2654435761u) ^ ((uint32_t)(ui_t * 12.0f) * 2246822519u);
+            float w;
+            h ^= h >> 15;
+            h *= 2246822519u;
+            h ^= h >> 13;
+            w = (float)(h & 1023u) / 1023.0f;
+            a = r && r->kind == SKIND_BROWN ? 0.35f + 0.25f * w : r && r->kind == SKIND_PINK ? 0.25f + 0.45f * w
+              : r && r->kind == SKIND_CRACKLE ? (w > 0.93f ? 0.9f : 0.05f + 0.05f * w) : 0.15f + 0.75f * w;
         }
         {
             int32_t h = (int32_t)(a * 46.0f) + 1;
@@ -464,8 +470,8 @@ static void pic_fx(void)
         case FXT_COMP: {                 /* the three bands: level in, gain change */
             static const char *const BN[3] = {"LOW", "BAND", "HIGH"};
             for (i = 0; i < 3; i++) {
-                int32_t x = 30 + i * 70, lh = (int32_t)(clampf(vw->a[i], 0.0f, 1.0f) * 70.0f);
-                float gr = vw->a[3 + i];
+                int32_t x = 30 + i * 70, lh = (int32_t)(clampf((vw->a[i] + 60.0f) / 60.0f, 0.0f, 1.0f) * 70.0f);
+                float gr = vw->a[6 + i];   /* dB: + upward, - downward */
                 int32_t gh = (int32_t)(clampf(gr, -24.0f, 24.0f) * 1.4f);
                 cv_rect(x, 130 - 70, 16, 70, G1);
                 cv_rect(x, 130 - lh, 16, lh, TEAL);

@@ -36,7 +36,7 @@ typedef struct {
     uint16_t vmask;                      /* which */
     uint8_t vnote[NVOICE];
     float src[MS_N];                     /* the newest voice's sources now (0..1; BEND -1..1) */
-    float live[NPARAM];                  /* every modulated parameter's value now (0..1), the newest voice / global */
+    uint16_t live[NPARAM];               /* every modulated parameter's value now (0..65535), the newest voice / global */
     float env_stage[6];                  /* the envelopes: stage (0 delay 1 attack 2 hold 3 decay 4 sustain 5 release
                                             6 off) + the time in it (0..1) */
     float lfo_ph[8];                     /* the LFOs' phase (0..1, the shape's x) */
