@@ -43,7 +43,7 @@ static const wt_t *volatile tab[NOSC];   /* the tables (main loop: core_table) *
 static const wt_t *volatile tab_used[NOSC][2];   /* what the render read last and the block before */
 
 /* --------------------------------------------------------------------- commands --- */
-#define CMDN 64u
+#define CMDN 32u                         /* (emptied every control block: 32 is plenty) */
 enum { C_KEY, C_HOLD, C_PANIC };
 static volatile uint32_t cmd_q[CMDN][2], cmd_w, cmd_r;
 static volatile float in_press, in_wheel, in_bend;
@@ -110,7 +110,6 @@ static uint32_t v_order;
 static int hold_on, budget = 64, mono_last = -1;
 static float press, wheel, bend, tempo = 120.0f, clock_s;
 static uint32_t rng_g = 0x2545F491u;
-static uint8_t keys_down[128];
 static int legato_stack[16], nstack;
 
 /* per-core scratch: the modulation of the voice being rendered, and its buffers */
@@ -275,7 +274,6 @@ static RAMC voice_t *voice_pick(void)
 
 static RAMC void note_on(int note, int vel)
 {
-    keys_down[note] = 1;
     if (poly_n() == 1) {                 /* mono: one voice; legato keeps the envelopes */
         voice_t *v = &V[0];
         int leg = pc(P_V_LEGATO) && v->on && v->gate;
@@ -289,7 +287,6 @@ static RAMC void note_on(int note, int vel)
 static RAMC void note_off(int note)
 {
     int i;
-    keys_down[note] = 0;
     if (poly_n() == 1) {
         int j, k = 0;
         for (j = 0; j < nstack; j++)

@@ -447,6 +447,50 @@ static void seq_entry(int kind, int note)   /* GLO + a key on the sequencer page
     project_changed();
 }
 
+/* ------------------------------------------------------------- the USB host --- */
+/* GLO + HOME: the USB-C port as a MIDI host, so a USB-MIDI keyboard plays this (fm1.toml usb_host; felucca-bsp's
+ * docs/USB_HOST.md). The FM-1 gives the port no power: a powered hub, or an OTG adapter with power in. While it is
+ * a host there is no computer (no USB audio, no updates); GLO + HOME again gives the port back to the computer. */
+static void usbh_toggle(void)
+{
+    int on = plat_usb_host_state() == USBH_OFF;
+    plat_usb_host(on);
+    app_say("USB HOST", on ? "LOOKING" : "OFF");
+}
+static void usbh_name(char *t, uint32_t max)   /* the keyboard's own name, upper case */
+{
+    const char *n = plat_usb_host_name();
+    uint32_t i;
+    for (i = 0; n[i] && i + 1u < max; i++)
+        t[i] = n[i] >= 'a' && n[i] <= 'z' ? (char)(n[i] - 32) : n[i];
+    t[i] = 0;
+    if (!t[0])
+        copy_text(t, "MIDI DEVICE", max);
+}
+static void usbh_service(void)           /* main loop: what the port says; a lost device lets go of its notes */
+{
+    char t[32];
+    if (plat_usb_lost())
+        core_panic();
+    switch (plat_usb_host_msg()) {
+    case USBH_MSG_ON: app_say("USB HOST", "PLUG IN A KEYBOARD"); break;
+    case USBH_MSG_OFF: app_say("USB", "TO THE COMPUTER"); break;
+    case USBH_MSG_MIDI: usbh_name(t, sizeof t); app_say(t, "CONNECTED"); break;
+    case USBH_MSG_NOMIDI: app_say("USB DEVICE", "NOT MIDI"); break;
+    case USBH_MSG_LOW: app_say("USB DEVICE", "LOW SPEED: NO"); break;
+    case USBH_MSG_LOST: app_say("USB DEVICE", "UNPLUGGED"); break;
+    default: break;
+    }
+}
+/* the header's mark: dim while looking, lit with a device */
+static void usbh_mark(int32_t x, int32_t y, uint16_t on_c, uint16_t look_c)
+{
+    int st = plat_usb_host_state();
+    if (st == USBH_OFF)
+        return;
+    cv_text(x, y, &FONT_T, "USB", st == USBH_CONNECTED ? on_c : look_c);
+}
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), k, now = plat_ms(), maxp = 0;
@@ -601,6 +645,8 @@ static void input(void)
             if (glo && ui.mode == MD_MIX) {
                 ui.path ^= 1u;
                 ui.top_dirty = 1;
+            } else if (glo) {            /* (outside the mixer) the USB port as a MIDI host */
+                usbh_toggle();
             } else {
                 go_mode(ui.mode == MD_TAPE ? MD_MIX : MD_TAPE);
             }

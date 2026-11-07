@@ -8,6 +8,7 @@
 #define APP_SPLASH_RGB RGB(150, 110, 255)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_TOUCH                        /* velocity and pressure from the keys (lib/touch.h) */
+#define APP_USB_HOST_NAME                /* the USB host reads its keyboard's name */
 #define APP_OVERLOAD                     /* the render over 90 % of its time: shed a voice */
 void app_overload(void);
 

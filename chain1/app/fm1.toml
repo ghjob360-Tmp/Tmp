@@ -7,6 +7,8 @@ o2 = ["dsp.c"]                 # the sound engine at -O2, its own unit, running 
 o2_cflags = ["-fno-builtin"]   # no memset / memcpy calls made up from its loops (they are in the flash)
 words = "words.tsv"
 ble = false
+usb_host = true                # GLO + HOME: the USB port as a MIDI host (a USB-MIDI keyboard; a powered hub)
+stack_bounds = ["uh_probe=3", "uh_hub_port_probe=3"]   # felucca-bsp's USB host: a hub, then its devices
 # the .rfm1's manifest and firmware.json
 repo = "https://github.com/ghjob360-Tmp/Tmp"
 licence = "MPL-2.0"

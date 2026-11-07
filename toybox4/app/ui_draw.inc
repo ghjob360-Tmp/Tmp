@@ -50,8 +50,12 @@ static void draw_header(void)
     }
     if (ui.armed && (!CORE_VIEW.recording || (ui_now / 250u) & 1u))
         disc(x + 15, 9, 4, REDC);
-    num_text(pj.tempo, n);
-    rtext(238, 4, &FONT_T, n, G3);
+    if (plat_usb_host_state() != USBH_OFF) {   /* the USB host: its mark where the tempo is */
+        usbh_mark(222, 4, K_WHITE, G2);
+    } else {
+        num_text(pj.tempo, n);
+        rtext(238, 4, &FONT_T, n, G3);
+    }
 }
 
 /* ------------------------------------------------------------ my pictures --- */
@@ -553,6 +557,7 @@ void app_frame(void)
     ui_t = (float)ui_now * 0.001f;
     input();
     sampler_service();
+    usbh_service();
     ann_tick(ui_now);
     for (t = 0; t < NTRK; t++)           /* the drum hits: when */
         for (p = 0; p < NDKEY; p++)

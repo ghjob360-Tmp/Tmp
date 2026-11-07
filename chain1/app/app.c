@@ -5,6 +5,7 @@
  *   ARP  a press: arp on / off and its page; held half a second: latch
  *   SELECT the section; PRESET the section's TYPE; K1..K4 its parameters (GLO held: fine steps)
  *   ALGORITHM a factory sound; OCT- / OCT+ the octave; SAVE keeps the sound; HOME all notes off
+ *   GLO + HOME the USB port as a MIDI host: a USB-MIDI keyboard plays it (a powered hub: the FM-1 gives no power)
  * Part of the unity build after the platform (gfx.c's drawing is in scope). The sound is in dsp.c (an o2 unit). */
 #include <stddef.h>
 #include "fastmath.h"
@@ -262,6 +263,50 @@ static void go_section(int s)
         ann_say(SECT[s].name, 0, ANN_NOW);
 }
 
+/* ------------------------------------------------------------- the USB host --- */
+/* GLO + HOME: the USB-C port as a MIDI host, so a USB-MIDI keyboard plays this (fm1.toml usb_host; felucca-bsp's
+ * docs/USB_HOST.md). The FM-1 gives the port no power: a powered hub, or an OTG adapter with power in. While it is
+ * a host there is no computer (no USB audio, no updates); GLO + HOME again gives the port back to the computer. */
+static void usbh_toggle(void)
+{
+    int on = plat_usb_host_state() == USBH_OFF;
+    plat_usb_host(on);
+    app_say("USB HOST", on ? "LOOKING" : "OFF");
+}
+static void usbh_name(char *t, uint32_t max)   /* the keyboard's own name, upper case */
+{
+    const char *n = plat_usb_host_name();
+    uint32_t i;
+    for (i = 0; n[i] && i + 1u < max; i++)
+        t[i] = n[i] >= 'a' && n[i] <= 'z' ? (char)(n[i] - 32) : n[i];
+    t[i] = 0;
+    if (!t[0])
+        copy_text(t, "MIDI DEVICE", max);
+}
+static void usbh_service(void)           /* main loop: what the port says; a lost device lets go of its notes */
+{
+    char t[32];
+    if (plat_usb_lost())
+        dsp_panic();
+    switch (plat_usb_host_msg()) {
+    case USBH_MSG_ON: app_say("USB HOST", "PLUG IN A KEYBOARD"); break;
+    case USBH_MSG_OFF: app_say("USB", "TO THE COMPUTER"); break;
+    case USBH_MSG_MIDI: usbh_name(t, sizeof t); app_say(t, "CONNECTED"); break;
+    case USBH_MSG_NOMIDI: app_say("USB DEVICE", "NOT MIDI"); break;
+    case USBH_MSG_LOW: app_say("USB DEVICE", "LOW SPEED: NO"); break;
+    case USBH_MSG_LOST: app_say("USB DEVICE", "UNPLUGGED"); break;
+    default: break;
+    }
+}
+/* the header's mark: dim while looking, lit with a device */
+static void usbh_mark(int32_t x, int32_t y, uint16_t on_c, uint16_t look_c)
+{
+    int st = plat_usb_host_state();
+    if (st == USBH_OFF)
+        return;
+    cv_text(x, y, &FONT_T, "USB", st == USBH_CONNECTED ? on_c : look_c);
+}
+
 static void input(void)
 {
     uint32_t keys = plat_keys(), btn = plat_buttons(), k, now = plat_ms();
@@ -289,7 +334,14 @@ static void input(void)
         case B_ENV: go_section(S_EG); break;
         case B_FX: go_section(ui.sect == S_MOD ? S_DLY : ui.sect == S_DLY ? S_REV : S_MOD); break;
         case B_ARP: ui.arp_t = now; ui.arp_held_done = 0; break;
-        case B_HOME: dsp_panic(); app_say("ALL NOTES", "OFF"); break;
+        case B_HOME:
+            if (fine)                    /* GLO + HOME: the USB port as a MIDI host */
+                usbh_toggle();
+            else {
+                dsp_panic();
+                app_say("ALL NOTES", "OFF");
+            }
+            break;
         case B_OCTDN: case B_OCTUP: {
             int o = clamp(set.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
             if (o != set.octave) {
@@ -438,6 +490,7 @@ static void draw_top(void)
         text_cat(t, o, sizeof t);
         cv_text(232 - text_w(&FONT_XS, t), 3, &FONT_XS, t, C_HI);
     }
+    usbh_mark(118, 4, C_HI, C_GRAY);
     if (ui.arp_on)
         cv_text(150, 3, &FONT_XS, ui.arp_latch ? "ARP LATCH" : "ARP", C_AMB);
     if (now < vw.pop_until || now < ui.msg_until) {   /* the value, large */
@@ -545,6 +598,7 @@ void app_frame(void)
     uint32_t now = plat_ms();
     int sounding = dsp_vu() > 0.004f;
     input();
+    usbh_service();
     ann_tick(now);
     if (note != ui.last_note) {
         ui.last_note = note;

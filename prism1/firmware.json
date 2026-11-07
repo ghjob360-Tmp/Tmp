@@ -14,7 +14,7 @@
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],
-    "features": ["usb-audio-in", "usb-audio-out", "second-core", "velocity", "pressure", "screen-reader"]
+    "features": ["usb-audio-in", "usb-audio-out", "usb-midi-host", "second-core", "velocity", "pressure", "screen-reader"]
   },
   "credits": "after Vital by Matt Tytel (GPL-3.0): its oscillator warps, envelope curves and voice architecture, cut down for the FM-1; built on fm1-base (Charles Vestal) and felucca-bsp (Leo Kuroshita, Hugelton Instruments)"
 }

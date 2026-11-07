@@ -27,9 +27,12 @@ static void draw_header(void)
         cv_rect(232, 3, 4, 14, G1);
         cv_rect(232, 17 - h, 4, h, pk > 0.97f ? REDC : TEAL);
     }
-    /* voices in use */
-    for (i = 0; i < NVOICE; i++)
-        cv_rect(206 + (i & 3) * 6, 4 + (i >> 2) * 7, 4, 5, (CORE_VIEW.vmask >> i) & 1u ? TEAL : G1);
+    /* voices in use (with the USB host on: its mark there instead) */
+    if (plat_usb_host_state() != USBH_OFF)
+        usbh_mark(208, 3, TEAL, G2);
+    else
+        for (i = 0; i < NVOICE; i++)
+            cv_rect(206 + (i & 3) * 6, 4 + (i >> 2) * 7, 4, 5, (CORE_VIEW.vmask >> i) & 1u ? TEAL : G1);
 }
 
 static void draw_toast(void)
@@ -228,6 +231,7 @@ void app_frame(void)
     ui_t = (float)ui_now * 0.001f;
     input();
     tables_service();
+    usbh_service();
     if (set_dirty && ui_now - changed_at > 3000u)   /* the edits kept, a while after the last */
         settings_save();
     if (ui_now - cpu_at > 1000u) {
@@ -279,6 +283,12 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "budget")) *got = CORE_VIEW.budget;
     else if (!strcmp(what, "hold")) *got = ui.hold;
     else if (!strcmp(what, "nuser")) *got = NUSER;
+    else if (!strcmp(what, "user_used")) {
+        int i, n = 0;
+        for (i = 0; i < NUSER; i++)
+            n += user_get(i) != 0;
+        *got = n;
+    }
     else return 0;
     return 1;
 }

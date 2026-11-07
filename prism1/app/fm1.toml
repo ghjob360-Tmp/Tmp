@@ -15,6 +15,8 @@ ram_code_allow = ["core_render"]   # it hands the odd voices to the second core:
 o2_cflags = ["-fno-builtin"]   # no memset / memcpy calls made up from loops (RAM code may not call the flash)
 words = "words.tsv"
 ble = false
+usb_host = true                # GLO + HOME: the USB port as a MIDI host (a USB-MIDI keyboard; a powered hub)
+stack_bounds = ["uh_probe=3", "uh_hub_port_probe=3"]   # felucca-bsp's USB host: a hub, then its devices
 repo = "https://github.com/ghjob360-Tmp/Tmp"
 licence = "GPL-3.0-only"
 authors = ["ghjob360"]

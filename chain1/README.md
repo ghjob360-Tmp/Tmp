@@ -5,8 +5,8 @@
 DSP 全部自己寫，沒有使用 Korg 的程式碼、音色或素材；本專案與 Korg、M-VAVE 無關。授權 MPL-2.0。
 
 同一份原始碼編出：
-- `dist/chain-1-0.2.fwsc`：燒進 M-VAVE FM-1 實機（安裝識別碼 `FM-1_94000200`）
-- `dist/chain-1-0.2.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/chain-1-0.3.fwsc`：燒進 M-VAVE FM-1 實機（安裝識別碼 `FM-1_94000300`）
+- `dist/chain-1-0.3.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
 - `dist/chain-1-demo.mp3`：用 host 模擬器錄的 23 秒 demo（6 組出廠音色，包含琶音），聲音和實機是同一份 DSP
 
 | | | | |
@@ -47,7 +47,7 @@ NTS-1 的小螢幕有兩個招牌：
 | ALGORITHM 編碼器 | 載入出廠音色：INIT、BASS、LEAD、PAD、ARP VPM、DRONE |
 | OCT− / OCT+ | 八度 −2..+2 |
 | SAVE | 把目前音色存進 flash（有未存的變更時燈會亮）|
-| HOME | 全部音符關閉、清空效果殘響 |
+| HOME | 全部音符關閉、清空效果殘響（GLO + HOME：USB host，接 USB MIDI 鍵盤）|
 | MASTER | 音量 |
 | 鍵盤 | 單音、後按優先；同時從 USB-MIDI 送出 |
 | MIDI in（USB / TRS）| 音符；CC 74 cutoff、71 resonance、73 attack、72 release |
@@ -72,6 +72,26 @@ SHAPE / ALT 的意義（我自己定義的，NTS-1 原廠的定義沒有公開�
 - SQR：SHAPE = 脈寬 50 → 95 %；ALT = sub osc
 - VPM：SHAPE = 相位調變指數；ALT = 調變器頻率比（0.5、1、1.5、2、3、4、5、7）
 
+## 接 USB MIDI 鍵盤（USB host）
+
+**GLO + HOME**：把 FM-1 的 USB-C 切成 **host**，接上 USB MIDI 鍵盤或控制器就能直接彈；再按一次，USB 就交還給電腦。開機時一定是一般的裝置模式。
+
+- **要外接電源**：FM-1 不從 USB-C 供 5V 電。要用以下其中一種：
+  - 有外接電源的 USB hub：FM-1 接 hub 的上游，鍵盤插下游。
+  - 可另外插充電器的 OTG 轉接頭。
+- **支援的裝置**：class-compliant 的 USB MIDI 1.0（full speed）鍵盤或控制器，可以直接接，或經過一個 hub。不支援低速裝置、多層 hub、MIDI 2.0 和 SysEx。
+- **畫面**：
+  - 提示列會顯示：等待中、鍵盤自己的名稱加「CONNECTED」、「NOT MIDI」，或「UNPLUGGED」。
+  - 標題列中間出現 USB 標示：暗色是等待中，亮色是已連上。
+- **能彈什麼**：鍵盤送來的音符、力度、滾輪、pitch bend、sustain 等，跟原本的 MIDI 輸入一樣處理。
+- **拔掉時**：自動放開所有音，不會卡音。
+- **當 host 的期間**：沒有電腦連線，USB 音訊、韌體更新、螢幕鏡像都暫停。
+- **底層**：felucca-bsp 的 USB MIDI host，從 Melodee 韌體移植，`fm1.toml` 的 `usb_host = true`。
+- **測試狀態**：
+  - 只在 host 模擬器上測過插上、彈奏、拔掉，測試檔是 `app/tests/usbh.txt`。
+  - 這份移植版本身，文件寫明還沒有實機驗證。
+  - 能不能認到 hub，也取決於 FM-1 的 USB-C CC 接法和你用的轉接頭。
+
 ## 程式結構
 
 ```
@@ -93,9 +113,9 @@ app/tests/demo.txt    錄 demo
 
 ```sh
 ./build.sh --host && app/build/host/chain-1_host app/tests/basic.txt app/build/host
-./build.sh --release 0.1            # → app/build/chain-1-0.2.fwsc
-./build.sh --rfm1 --release 0.1     # → app/build/chain-1-0.2.rfm1（先 commit）
-node base/tests/rfm1_test.mjs app/build/chain-1-0.2.rfm1
+./build.sh --release 0.3            # → app/build/chain-1-0.3.fwsc
+./build.sh --rfm1 --release 0.3     # → app/build/chain-1-0.3.rfm1（先 commit）
+node base/tests/rfm1_test.mjs app/build/chain-1-0.3.rfm1
 ```
 
 ### 實測結果
@@ -114,5 +134,5 @@ node base/tests/rfm1_test.mjs app/build/chain-1-0.2.rfm1
 - 畫布上限是 240×144，所以分上下兩塊、各 120 列畫。
 
 ## 安裝
-- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/chain-1-0.2.rfm1`
-- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/chain-1-0.2.fwsc`
+- **RemoteFM1**：https://remotefm1.com/ →「Open a file…」→ `dist/chain-1-0.3.rfm1`
+- **FM-1 實機**（風險自負；先備份，準備好救磚工具）：`python3 base/tools/fm1_install.py dist/chain-1-0.3.fwsc`

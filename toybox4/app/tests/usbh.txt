@@ -1,0 +1,28 @@
+# the USB port as a MIDI host: GLO + HOME (outside the mixer), a keyboard plugged in plays the current track
+wait 1000
+tap FX
+wait 100
+expect track 2
+press GLO
+tap HOME
+release GLO
+wait 200
+expect usbh 1
+expect mode 2
+usbh plug Keystation_49
+wait 300
+expect usbh 2
+shot usbh_connected.png
+usbh midi 90 3C 64
+usbh midi 90 43 64
+wait 400
+expect voices 2
+expect loud 1
+usbh unplug
+wait 3000
+expect voices 0
+press GLO
+tap HOME
+release GLO
+wait 200
+expect usbh 0

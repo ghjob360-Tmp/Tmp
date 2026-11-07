@@ -3,8 +3,8 @@
 把 [Vital](https://github.com/mtytel/vital)（Matt Tytel，GPL-3.0）的聲音架構和互動方式，盡量完整地搬到 M-VAVE FM-1 的兩顆 360 MHz 核心上。Vital 的系統架構與互動整理在 [`docs/VITAL_REFERENCE.md`](docs/VITAL_REFERENCE.md)，每一項都對照了 PRISM-1 的做法。
 
 同一份原始碼編出：
-- `dist/prism-1-1.0.fwsc`：燒進 FM-1 實機
-- `dist/prism-1-1.0.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/prism-1-1.1.fwsc`：燒進 FM-1 實機
+- `dist/prism-1-1.1.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
 - `dist/prism-1-demo.mp3`：24 個出廠音色各彈一段，用 host 模擬器錄的，和實機是同一份 DSP
 
 授權 **GPL-3.0-only**（依循 Vital 的公式），詳見 `LICENSING.md`。本專案與 Vital Audio、M-VAVE 無關。
@@ -64,7 +64,7 @@
 | LFO | LFO 1 … 8（GLO：RANDOM 1 … 4）|
 | SEQ | MATRIX |
 | FX | EFFECTS（在效果頁再按：選中的效果開 / 關）|
-| HOME | MACROS ↔ VOICE |
+| HOME | MACROS ↔ VOICE（GLO：USB host，接 USB MIDI 鍵盤）|
 | **ARP** | **撿起這一頁的調變源**（ENV、LFO、RANDOM、MACRO），之後轉**任何**一顆旋鈕就是在設定這個來源對它的調變量；再按一次放下 |
 | PLAY | hold（sustain）|
 | REC | 全部音符關閉（GLO + 按住 1 秒：INIT 新音色）|
@@ -76,6 +76,26 @@
 | K1–K4 | 這一列的四個參數（GLO：微調；快轉會加速）|
 | 鍵盤 | 力度和壓力（壓力是矩陣的 PRESSURE 來源）|
 | MIDI in | 音符、CC1 mod wheel、CC64 sustain、channel pressure、pitch bend、CC74 / CC71 = FILTER 1 cutoff / resonance |
+
+## 接 USB MIDI 鍵盤（USB host）
+
+**GLO + HOME**：把 FM-1 的 USB-C 切成 **host**，接上 USB MIDI 鍵盤或控制器就能直接彈；再按一次，USB 就交還給電腦。開機時一定是一般的裝置模式。
+
+- **要外接電源**：FM-1 不從 USB-C 供 5V 電。要用以下其中一種：
+  - 有外接電源的 USB hub：FM-1 接 hub 的上游，鍵盤插下游。
+  - 可另外插充電器的 OTG 轉接頭。
+- **支援的裝置**：class-compliant 的 USB MIDI 1.0（full speed）鍵盤或控制器，可以直接接，或經過一個 hub。不支援低速裝置、多層 hub、MIDI 2.0 和 SysEx。
+- **畫面**：
+  - 提示列會顯示：等待中、鍵盤自己的名稱加「CONNECTED」、「NOT MIDI」，或「UNPLUGGED」。
+  - 標題列右上角（取代 voice 小方塊）出現 USB 標示：暗色是等待中，亮色是已連上。
+- **能彈什麼**：鍵盤送來的音符、力度、滾輪、pitch bend、sustain 等，跟原本的 MIDI 輸入一樣處理。
+- **拔掉時**：自動放開所有音，不會卡音。
+- **當 host 的期間**：沒有電腦連線，USB 音訊、韌體更新、螢幕鏡像都暫停。
+- **底層**：felucca-bsp 的 USB MIDI host，從 Melodee 韌體移植，`fm1.toml` 的 `usb_host = true`。
+- **測試狀態**：
+  - 只在 host 模擬器上測過插上、彈奏、拔掉，測試檔是 `app/tests/usbh.txt`。
+  - 這份移植版本身，文件寫明還沒有實機驗證。
+  - 能不能認到 hub，也取決於 FM-1 的 USB-C CC 接法和你用的轉接頭。
 
 ### 畫面（Vital 的樣子：深藍灰底、青綠是數值、紫色是調變）
 - **旋鈕**：青綠色弧是數值；外圈紫色弧是調變的可及範圍；白色刻度是最新 voice 正在聽到的值。撿起來源時，可被調變的旋鈕標籤變紫，數值改顯示調變量。
@@ -102,7 +122,7 @@
 
 一度把 wavetable 減到 24 幀；sampler 搬去快閃後，省下的 RAM 又把它加回 32 幀。
 
-最後的用量（`./build.sh --release 1.0`）：
+最後的用量（`./build.sh --release 1.1`）：
 
 | | 用量 | 上限 |
 |---|---|---|
@@ -128,8 +148,8 @@
 app/build/host/prism-1_host app/tests/basic.txt app/build/host    # 冒煙測試
 app/build/host/prism-1_host app/tests/sounds.txt app/build/host   # 24 個音色，錄成 sounds.wav
 app/build/host/prism-1_host app/tests/stress.txt app/build/host   # 最壞情況
-./build.sh --release 1.0 && ./build.sh --rfm1 --release 1.0
-node base/tests/rfm1_test.mjs app/build/prism-1-1.0.rfm1
+./build.sh --release 1.1 && ./build.sh --rfm1 --release 1.1
+node base/tests/rfm1_test.mjs app/build/prism-1-1.1.rfm1
 ```
 
 `basic.txt` 涵蓋：

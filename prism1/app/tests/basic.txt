@@ -147,3 +147,15 @@ expect dirty 0
 reboot
 wait 1500
 expect preset 24
+# two more into the next slots (the same sector's other slot, then the next sector): all three kept
+press GLO
+tap SAVE
+release GLO
+wait 300
+press GLO
+tap SAVE
+release GLO
+wait 300
+reboot
+wait 1500
+expect user_used 3

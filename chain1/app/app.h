@@ -24,5 +24,6 @@ void app_input_only(void);
 void app_say(const char *a, const char *b);
 
 /* the host simulator's checks (tests/basic.txt "expect") */
+#define APP_USB_HOST_NAME                /* the USB host reads its keyboard's name */
 #define APP_HOST_EXPECT
 int app_expect(const char *what, int *got);

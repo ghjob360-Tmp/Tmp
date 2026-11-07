@@ -10,8 +10,8 @@
 
 OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這次的設計就是以它為準。
 
-- `dist/toybox-4-1.0.fwsc`：燒進 FM-1 實機
-- `dist/toybox-4-1.0.rfm1`：在 RemoteFM1 裡跑
+- `dist/toybox-4-1.1.fwsc`：燒進 FM-1 實機
+- `dist/toybox-4-1.1.rfm1`：在 RemoteFM1 裡跑
 - `dist/toybox-4-demo.mp3`：demo，約 58 秒。流程是：
   1. 開機自帶的 demo 磁帶播放
   2. 在 T3 疊錄一段旋律
@@ -67,7 +67,7 @@ OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這�
 |---|---|
 | EDIT | 合成模式（目前軌用合成樂器）；GLO+EDIT 還原這個 slot |
 | ARP | 鼓模式（目前軌用鼓樂器）；GLO+ARP 還原 |
-| HOME | 磁帶 ↔ 混音；在混音時 GLO+HOME 看訊號路徑 |
+| HOME | 磁帶 ↔ 混音；在混音時 GLO+HOME 看訊號路徑，其他時候 GLO+HOME 是 USB host（接 USB MIDI 鍵盤）|
 | SEL / ENV / FX / LFO | **T1–T4**。合成/鼓：引擎、包絡、效果、LFO（FX、LFO 再按一次開關）。磁帶：選軌（GLO = 靜音）。混音：音量、EQ、master FX、輸出 |
 | SEQ | 音序器頁；在音序器頁再按一次（或 GLO+SEQ）開關 |
 | PLAY | 播放 / 停止；GLO+PLAY 倒轉 |
@@ -92,6 +92,26 @@ OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這�
 | 第 2 排 | DROP（貼上）| LIFT 全部軌 | MEMO 1 | MEMO 2（按住 0.6 秒存速度、方向、混音；點一下叫回）| 回到開頭 | 速度歸 1× | 節拍器 | – |
 
 磁帶的 K1–K4 是：磁頭位置、循環起點、速度（varispeed）、循環長度。GLO 那排是：sync（速度要不要拖著 tempo 走）、tempo、固定速度、節拍器。
+
+## 接 USB MIDI 鍵盤（USB host）
+
+**GLO + HOME**（混音模式以外；混音模式裡仍是訊號路徑）：把 FM-1 的 USB-C 切成 **host**，接上 USB MIDI 鍵盤或控制器就能直接彈；再按一次，USB 就交還給電腦。開機時一定是一般的裝置模式。
+
+- **要外接電源**：FM-1 不從 USB-C 供 5V 電。要用以下其中一種：
+  - 有外接電源的 USB hub：FM-1 接 hub 的上游，鍵盤插下游。
+  - 可另外插充電器的 OTG 轉接頭。
+- **支援的裝置**：class-compliant 的 USB MIDI 1.0（full speed）鍵盤或控制器，可以直接接，或經過一個 hub。不支援低速裝置、多層 hub、MIDI 2.0 和 SysEx。
+- **畫面**：
+  - 提示列會顯示：等待中、鍵盤自己的名稱加「CONNECTED」、「NOT MIDI」，或「UNPLUGGED」。
+  - 標題列右上角（取代 tempo）出現 USB 標示：暗色是等待中，亮色是已連上。
+- **能彈什麼**：鍵盤送來的音符、力度、滾輪、pitch bend、sustain 等，跟原本的 MIDI 輸入一樣處理。彈的是目前這一軌，錄音時也會錄進磁帶。
+- **拔掉時**：自動放開所有音，不會卡音。
+- **當 host 的期間**：沒有電腦連線，USB 音訊、韌體更新、螢幕鏡像都暫停。
+- **底層**：felucca-bsp 的 USB MIDI host，從 Melodee 韌體移植，`fm1.toml` 的 `usb_host = true`。
+- **測試狀態**：
+  - 只在 host 模擬器上測過插上、彈奏、拔掉，測試檔是 `app/tests/usbh.txt`。
+  - 這份移植版本身，文件寫明還沒有實機驗證。
+  - 能不能認到 hub，也取決於 FM-1 的 USB-C CC 接法和你用的轉接頭。
 
 ## 模組
 
@@ -142,7 +162,7 @@ OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這�
   - ARP：4 種走法、1–4 個八度、觸發 pattern
   - LATCH：分鍵點、單音或複音、移調
 
-## 預算（實測，`./build.sh --release 1.0`）
+## 預算（實測，`./build.sh --release 1.1`）
 
 | | 用量 | 上限 |
 |---|---|---|
@@ -170,8 +190,8 @@ OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這�
 ```sh
 ./build.sh --host && app/build/host/toybox-4_host app/tests/basic.txt app/build/host   # 冒煙測試，全部 ok
 app/build/host/toybox-4_host app/tests/demo.txt app/build/host                        # demo.wav
-./build.sh --release 1.0 && ./build.sh --rfm1 --release 1.0
-node base/tests/rfm1_test.mjs app/build/toybox-4-1.0.rfm1
+./build.sh --release 1.1 && ./build.sh --rfm1 --release 1.1
+node base/tests/rfm1_test.mjs app/build/toybox-4-1.1.rfm1
 ```
 
 `basic.txt` 涵蓋：

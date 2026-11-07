@@ -1,0 +1,25 @@
+# the USB port as a MIDI host: GLO + HOME, a keyboard plugged in plays, unplugged lets go
+wait 1500
+expect usbh 0
+press GLO
+tap HOME
+release GLO
+wait 200
+expect usbh 1
+usbh plug Launchkey_Mini
+wait 300
+expect usbh 2
+shot usbh_connected.png
+usbh midi 90 3C 64
+usbh midi 90 40 64
+wait 400
+expect voices 2
+expect loud 1
+usbh unplug
+wait 3000
+expect voices 0
+press GLO
+tap HOME
+release GLO
+wait 200
+expect usbh 0

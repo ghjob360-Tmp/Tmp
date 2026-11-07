@@ -165,8 +165,8 @@ static int find_table(const char *name)  /* a factory table by its name (0 when 
 #include "presets.inc"
 
 /* user presets: XDATA1, two a sector (3840 usable bytes of each 4 KiB) */
-#define UP_MAGIC 0x50525031u             /* "PRP1" */
-#define UP_SLOT 1920u
+#define UP_MAGIC 0x50525032u             /* "PRP2" */
+#define UP_SLOT 1792u                    /* 7 pages: two a sector, under its 3840 usable bytes */
 #define NUSER ((int)((PLAT_XDATA1_HI - PLAT_XDATA1_LO) / 4096u) * 2)
 static uint32_t up_off(int u) { return PLAT_XDATA1_LO + (uint32_t)(u >> 1) * 4096u + (uint32_t)(u & 1) * UP_SLOT; }
 static const patch_t *user_get(int u)    /* NULL = empty */
@@ -178,27 +178,32 @@ static const patch_t *user_get(int u)    /* NULL = empty */
     m = (uint32_t)q[0] | (uint32_t)q[1] << 8 | (uint32_t)q[2] << 16 | (uint32_t)q[3] << 24;
     return m == UP_MAGIC ? (const patch_t *)(const void *)(q + 4) : 0;
 }
-static uint8_t sec[3840] __attribute__((aligned(4)));   /* a sector being rewritten; also the settings' image (main loop) */
-static int user_put(int u, const patch_t *p)   /* 0 = done */
+static uint8_t sec[UP_SLOT] __attribute__((aligned(4)));   /* one slot (the sector's other one, or this one being
+                                                             written); also the settings' image (main loop) */
+static int user_put(int u, const patch_t *p)   /* 0 = done: the sector erased, the other slot written back, then this */
 {
-    uint32_t base = PLAT_XDATA1_LO + (uint32_t)(u >> 1) * 4096u, i, magic = UP_MAGIC;
+    uint32_t base = PLAT_XDATA1_LO + (uint32_t)(u >> 1) * 4096u, i, magic = UP_MAGIC, other = (uint32_t)(u & 1) ^ 1u;
     const uint8_t *q = plat_data(base);
     if (!q || u < 0 || u >= NUSER)
         return -1;
-    for (i = 0; i < sizeof sec; i++)
-        sec[i] = q[i];
-    {
-        uint8_t *d = sec + (uint32_t)(u & 1) * UP_SLOT;
-        const uint8_t *s = (const uint8_t *)(const void *)p;
-        for (i = 0; i < 4; i++)
-            d[i] = (uint8_t)(magic >> (8 * i));
-        for (i = 0; i < sizeof(patch_t); i++)
-            d[4 + i] = s[i];
-    }
+    for (i = 0; i < UP_SLOT; i++)        /* the other slot, kept */
+        sec[i] = q[other * UP_SLOT + i];
     if (plat_data_erase(base))
         return -1;
-    for (i = 0; i < sizeof sec; i += 256u)
-        if (plat_data_write(base + i, sec + i, 256u))
+    for (i = 0; i < UP_SLOT; i += 256u)
+        if (plat_data_write(base + other * UP_SLOT + i, sec + i, 256u))
+            return -1;
+    for (i = 0; i < UP_SLOT; i++)        /* then this one */
+        sec[i] = 0xFFu;
+    {
+        const uint8_t *s = (const uint8_t *)(const void *)p;
+        for (i = 0; i < 4; i++)
+            sec[i] = (uint8_t)(magic >> (8 * i));
+        for (i = 0; i < sizeof(patch_t); i++)
+            sec[4 + i] = s[i];
+    }
+    for (i = 0; i < UP_SLOT; i += 256u)
+        if (plat_data_write(base + (uint32_t)(u & 1) * UP_SLOT + i, sec + i, 256u))
             return -1;
     return 0;
 }
@@ -213,6 +218,7 @@ typedef struct {
     int8_t octave;
     uint8_t rsv;
 } settings_t;
+typedef char settings_fits_[sizeof(settings_t) <= UP_SLOT ? 1 : -1];
 #define set (*(settings_t *)(void *)sec)   /* (no copy of its own: the sector buffer, aligned below) */
 static void settings_save(void)
 {
