@@ -99,7 +99,7 @@ static const char *const SCALE_N[5] = {"CHROMATIC", "MAJOR", "MINOR", "PENTATONI
 static const char *const PLAYM_N[3] = {"TO END", "LOOP", "ONCE"};
 static const char *const DWAVE_N[4] = {"SINE", "TRIANGLE", "SAW", "SQUARE"};
 static const char *const PWAVE_N[8] = {"SAW", "SQUARE", "PULSE", "DBL SINE", "SAW-PULSE", "RES I", "RES II", "RES III"};
-static const char *const SPEC_N[6] = {"SAW", "SQUARE", "ORGAN", "BELL", "VOCAL", "GLASS"};
+static const char *const SPEC_N[8] = {"SAW", "SQUARE", "PULSE", "ORGAN", "AAH", "BELL", "OOH", "GLASS"};
 
 /* ------------------------------------------------------------- the dials --- */
 enum { F_PCT, F_BIP, F_NAMES, F_RANGE, F_ATT, F_DEC, F_REL, F_DREL, F_MS, F_BEND, F_HZ, F_PARAM, F_TRIG, F_NOTE,
@@ -161,7 +161,7 @@ static void get_dials(dl_t d[4])
                     if ((e == E_DIGITAL && j == 1) || (e == E_DNA && j == 7)) { d[i].fmt = F_RANGE; d[i].lo = -2; d[i].hi = 2; }
                     if (e == E_DIGITAL && j == 5) { d[i].fmt = F_NAMES; d[i].n = 4; d[i].names = DWAVE_N; }
                     if (e == E_PHASE && j == 4) { d[i].fmt = F_NAMES; d[i].n = 8; d[i].names = PWAVE_N; }
-                    if (e == E_SPECTRA && j == 0) { d[i].fmt = F_NAMES; d[i].n = 6; d[i].names = SPEC_N; }
+                    if (e == E_SPECTRA && j == 0) { d[i].fmt = F_NAMES; d[i].n = 8; d[i].names = SPEC_N; }
                     if (e == E_DNA && j == 1) { d[i].fmt = F_RANGE; d[i].lo = 0; d[i].hi = 255; }
                     if (e == E_SAMPLER && j == 4) d[i].fmt = F_ONOFF;
                 }

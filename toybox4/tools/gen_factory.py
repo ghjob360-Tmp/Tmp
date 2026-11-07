@@ -214,10 +214,10 @@ SOUNDS = [
     ("SNARE", snare()), ("SNARE 2", snare(f0=230, tone=0.3, dec=0.12, bright=5200, dur=0.28)),
     ("RIM", rim()), ("CLAP", clap()), ("TAMB", tamb()),
     ("HAT", hat()), ("OPEN HAT", hat(dec=0.32, dur=0.6)), ("RIDE", hat(dec=0.6, f=5200, dur=1.0, metal=0.85)),
-    ("CRASH", hat(dec=0.9, f=4200, dur=1.5, metal=0.6)),
+    ("CRASH", hat(dec=0.8, f=4200, dur=1.2, metal=0.6)),
     ("TOM LO", tom(95)), ("TOM MID", tom(140, 0.25)), ("TOM HI", tom(200, 0.2, 0.4)),
-    ("CONGA", conga()), ("COWBELL", cowbell()), ("SHAKER", shaker()), ("BELL", bell()),
-    ("ZAP", zap()), ("SUB", subdrop()), ("VOX", vox_hit()), ("NOISE", noise_burst()),
+    ("CONGA", conga()), ("COWBELL", cowbell()), ("SHAKER", shaker()), ("BELL", bell(dur=1.1)),
+    ("ZAP", zap()), ("SUB", subdrop(dur=0.85)), ("VOX", vox_hit()), ("NOISE", noise_burst()),
     ("BLIP", tom(880, 0.05, 0.15)), ("CLAVE", conga(f0=2400, dur=0.12)),
 ]
 
@@ -249,6 +249,8 @@ def main():
     for name, snd in SOUNDS:
         pk = max(abs(x) for x in snd) or 1.0
         start = len(data)
+        fl = int(0.02 * SR)              # a 20 ms fade at the end: no click where it was cut
+        snd = [x * min(1.0, (len(snd) - i) / fl) for i, x in enumerate(snd)]
         data += [x / pk * 0.92 for x in snd]
         end = len(data)
         data += [0.0] * gap

@@ -211,25 +211,22 @@ static void pic_tape(void)
 static void pic_tape_tricks(void)        /* GLO on the tape screen: what each white key does */
 {
     static const char *const T[16] = {"IN", "OUT", "LOOP", "BREAK", "REV", "CHOP", "CHOP2", "LIFT",
-                                      "DROP", "LIFT4", "M1", "M2", "START", "x1", "CLICK", "-"};
+                                      "DROP", "ALL", "M1", "M2", "START", "x1", "CLICK", "-"};
+    static const char *const KN = "FGABCDEFGABCDEFG";   /* the white keys from the left */
+    static const uint8_t GR[16] = {0, 0, 0, 3, 3, 3, 3, 1, 1, 1, 2, 2, 4, 4, 4, 4};   /* loop, play, edit, memo, go */
     int i;
-    cv_rect(0, 86, 240, 58, G1);
+    cv_rect(0, 70, 240, 74, G1);
+    ctext(120, 73, &FONT_T, "GLO + A WHITE KEY", K_ORANGE);
     for (i = 0; i < 16; i++) {
-        int32_t x = 2 + i * 15;
-        cv_rect(x, 104, 13, 34, BG);
-        ctext(x + 7, 90 + (i & 1) * 0, &FONT_T, i < 9 ? "" : "", G3);
-        {                                /* the label, upright in two lines when long */
-            char a[4] = {0, 0, 0, 0};
-            a[0] = T[i][0];
-            a[1] = T[i][1];
-            ctext(x + 7, 106, &FONT_T, a, K_WHITE);
-            if (T[i][2]) {
-                char b2[4] = {T[i][2], T[i][3], T[i][3] ? T[i][4] : 0, 0};
-                ctext(x + 7, 120, &FONT_T, b2, K_WHITE);
-            }
-        }
+        int32_t x = 2 + (i & 7) * 30, y = 86 + (i >> 3) * 29;
+        int held = (int)((ui.trick_down >> i) & 1u);
+        uint16_t c = GR[i] < 4 ? KC[GR[i]] : G3;
+        char kn[2] = {KN[i], 0};
+        cv_rect(x, y, 28, 26, held ? c : BG);
+        cv_rect(x, y, 28, 2, c);
+        cv_text(x + 2, y + 3, &FONT_T, kn, held ? BG : G2);
+        ctext(x + 14, y + 13, &FONT_T, T[i], held ? BG : K_WHITE);
     }
-    ctext(120, 89, &FONT_T, "GLO + A WHITE KEY", K_ORANGE);
 }
 
 static void pic_levels(void)
