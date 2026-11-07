@@ -279,7 +279,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "budget")) *got = CORE_VIEW.budget;
     else if (!strcmp(what, "hold")) *got = ui.hold;
     else if (!strcmp(what, "nuser")) *got = NUSER;
-    else return -1;
-    return 0;
+    else return 0;
+    return 1;
 }
 #endif

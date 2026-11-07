@@ -15,7 +15,7 @@
  * ---- the wavetable oscillator (osc.c, RAMC) ----
  * Per voice per oscillator: up to MAXUNI unison voices, each its own phase. Per block the core gives an osc_ctl_t
  * (all already modulated); osc_run ADDS its stereo output into L / R (n <= CTL frames) and also writes the mono sum
- * (before pan, after level) into mono[] (for other oscillators' FM / RM next). Everything per sample must be cheap:
+ * (before pan and before the level: a modulator at level 0 still modulates) into mono[] (for other oscillators' FM / RM next). Everything per sample must be cheap:
  * budget ~25 flops per unison voice per sample incl. the warp (frame crossfade + linear interpolation + mip pick by
  * the voice's pitch: pick the level with no harmonic above ~20 kHz, crossfade toward the next level near the edge
  * is welcome but optional).
@@ -41,11 +41,11 @@
 #pragma once
 #include "common.h"
 
-#define WT_FRAMES 32
+#define WT_FRAMES 24
 #define WT_LEVELS 6
 #define WT_SIZE 504u                     /* 256 + 128 + 64 + 32 + 16 + 8 */
 #define WT_HARM 127
-#define SMP_RAM 32768u                   /* bytes: all the factory samples' RAM */
+#define SMP_RAM 28672u                   /* bytes: all the factory samples' RAM */
 typedef struct {
     int16_t d[WT_FRAMES][WT_SIZE];       /* 32,256 bytes */
 } wt_t;

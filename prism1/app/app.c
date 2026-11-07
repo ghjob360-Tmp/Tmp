@@ -178,9 +178,9 @@ static const patch_t *user_get(int u)    /* NULL = empty */
     m = (uint32_t)q[0] | (uint32_t)q[1] << 8 | (uint32_t)q[2] << 16 | (uint32_t)q[3] << 24;
     return m == UP_MAGIC ? (const patch_t *)(const void *)(q + 4) : 0;
 }
+static uint8_t sec[3840] __attribute__((aligned(4)));   /* a sector being rewritten; also the settings' image (main loop) */
 static int user_put(int u, const patch_t *p)   /* 0 = done */
 {
-    static uint8_t sec[3840];            /* the sector's other slot is kept */
     uint32_t base = PLAT_XDATA1_LO + (uint32_t)(u >> 1) * 4096u, i, magic = UP_MAGIC;
     const uint8_t *q = plat_data(base);
     if (!q || u < 0 || u >= NUSER)
@@ -213,14 +213,14 @@ typedef struct {
     int8_t octave;
     uint8_t rsv;
 } settings_t;
-static settings_t set;
+#define set (*(settings_t *)(void *)sec)   /* (no copy of its own: the sector buffer, aligned below) */
 static void settings_save(void)
 {
     set.magic = SET_MAGIC;
     set.p = pt;
     set.preset = (int16_t)cur_preset;
     set.octave = octave;
-    plat_store_save(OBJ_SETTINGS, &set, sizeof set);
+    plat_store_save(OBJ_SETTINGS, &set, sizeof(settings_t));
     set_dirty = 0;
 }
 
@@ -288,14 +288,15 @@ static volatile uint16_t cc_in[2];       /* CC 74 cutoff, 71 resonance (+1; 0 no
 static void midi_in(void)                /* audio interrupt */
 {
     uint32_t m;
-    while (plat_midi_recv(&m)) {
+    int port;
+    while (plat_midi_in(&m, &port)) {
         uint32_t st = m >> 8 & 0xFFu, d1 = m >> 16 & 0x7Fu, d2 = m >> 24 & 0x7Fu;
         if ((st & 0xF0u) == 0xB0u && d1 == 74u)
             cc_in[0] = (uint16_t)(d2 * 1023u / 127u + 1u);
         else if ((st & 0xF0u) == 0xB0u && d1 == 71u)
             cc_in[1] = (uint16_t)(d2 * 1023u / 127u + 1u);
         else
-            core_midi(st, d1, d2);
+            PLAT_FAR(core_midi)(st, d1, d2);
     }
 }
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
@@ -307,8 +308,8 @@ void app_panic(void) { core_panic(); }
 void app_overload(void) { core_overload(); }
 
 #include "ui_fmt.inc"
-#include "ui_pics.inc"
 #include "ui_input.inc"
+#include "ui_pics.inc"
 #include "ui_draw.inc"
 
 void app_init(void)
@@ -321,7 +322,7 @@ void app_init(void)
     smp_init();
     core_init();
     tables_reset();
-    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) == (int)sizeof set && set.magic == SET_MAGIC) {
+    if (plat_store_load(OBJ_SETTINGS, &set, sizeof(settings_t)) == (int)sizeof(settings_t) && set.magic == SET_MAGIC) {
         pt = set.p;
         patch_sane(&pt);
         cur_preset = set.preset >= 0 && set.preset < NPRESET ? set.preset : 0;

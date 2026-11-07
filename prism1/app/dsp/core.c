@@ -491,10 +491,10 @@ static RAMC void voice_mods(voice_t *v, float *vm, float dt)
     v->src[MS_RANDOM] = v->nrnd;
 }
 
-static RAMC void voice_block(int vi, uint32_t n)
+static RAMC void voice_block(int vi, uint32_t n, int core)   /* core: whose scratch (0 the first, 1 the second) */
 {
     voice_t *v = &V[vi];
-    int core = plat_core() ? 1 : 0, k, route = pc(P_F_ROUTE);
+    int k, route = pc(P_F_ROUTE);
     float *vm = vmod[core], (*b)[CTL] = scr[core], dt = (float)n * ISR, amp1, a0, da, pitch, vt, e1;
     uint32_t j, has = 0;                 /* bit per buffer pair with something in it */
     for (k = 0; k < B_N; k++)
@@ -670,7 +670,7 @@ static RAMC void job_odd(uint32_t arg)
     (void)arg;
     for (i = 1; i < NVOICE; i += 2)
         if (V[i].on)
-            voice_block(i, job_n);
+            voice_block(i, job_n, 1);
 }
 
 /* ---------------------------------------------------------------------- render --- */
@@ -701,7 +701,7 @@ RAMC void core_render(int32_t *lr, uint32_t n, float gain)
         handed = plat_cpu2_run(job_odd, 0);
         for (i = 0; i < NVOICE; i += 2)
             if (V[i].on)
-                voice_block(i, m);
+                voice_block(i, m, 0);
         if (!handed || plat_cpu2_wait() < 0)
             job_odd(0);
         for (j = 0; j < m; j++)
@@ -835,8 +835,8 @@ void core_init(void)
         uint32_t q;
         for (q = 0; q < sizeof(voice_t); q++)
             z[q] = 0;
-        filt_reset(&VF[i][0], 0, 0);
-        filt_reset(&VF[i][1], 0, 0);
+        PLAT_FAR(filt_reset)(&VF[i][0], 0, 0);   /* (RAM code, from the flash) */
+        PLAT_FAR(filt_reset)(&VF[i][1], 0, 0);
         V[i].osc[0].rng = 0x1234567u + (uint32_t)i * 7919u;
     }
     fx_init(a_cho, a_dly, a_flg, a_rev);

@@ -7,15 +7,16 @@
  * kept as they are only where a saturator bounds them. The per-model notes are at each run function.
  *
  * Smoothing: filt_ctl moves the cutoff (as a note) one-pole toward its target (tau 1.5 ms) and computes the block's
- * coefficient targets; filt_run moves each coefficient linearly from where the last block ended to its target, one
- * step a sample (Vital's per-block ramps), so a cutoff that jumps every block never zippers or clicks.
+ * coefficient targets; filt_run moves each coefficient linearly from where the last block ended to its target (Vital's
+ * per-block ramps): the ones that set the frequency (G, the SVF's a1..a3, the comb's period, the all-pass a) a step
+ * every sample, the gains, drives and mix amounts a step every 8 samples. A cutoff that jumps every block never
+ * zippers or clicks.
  *
- * Denormals: a 1e-18 offset rides on the input (inaudible, -360 dB); every value computed from it is either 0 or far
- * above the denormal range, so no state decays through denormals after silence. A state that went non-finite (NaN in
- * the input) is cleared at the end of the block.
+ * Denormals: at the end of each block a state under 1e-15 (-300 dB) is set to 0, so no state decays on through the
+ * denormals after silence. A state that went non-finite (NaN in the input) is cleared at the end of the block.
  *
- * Layout of filt_t.s (floats): s[0] the smoothed cutoff note (all models but FORMANT), then the states, then the
- * ramps: NR current values followed by NR per-sample steps, at RB. */
+ * Layout of filt_t.s (floats): s[0] the smoothed cutoff note (all models but FORMANT), then the states (L's, then
+ * R's), then the ramps: NR current values followed by NR per-sample steps, at RB. */
 #include "filt.h"
 
 const char *const FLT_NAME[FLT_N] = {"Analog", "Dirty", "Ladder", "Digital", "Diode", "Formant", "Comb", "Phaser"};
@@ -35,25 +36,30 @@ const char *const FLT_STYLE_NAME[FLT_N][FLT_MAXSTYLE] = {
 #define PRIMED 0x80000000u               /* filt_t.w: the ramps hold this patch's values (else jump to the targets) */
 #define WMASK (COMB_LEN - 1u)
 #define MAXHZ (0.45351473923f * SR)      /* Vital's kMinNyquistMult: 20 kHz */
-#define DNO 1e-18f                       /* the anti-denormal offset */
 #define NOTE_TAU (1.0f / 66.15f)         /* the cutoff smoothing: 1 / (1.5 ms in samples) */
+#if defined(__clang__)
+#define SMALL __attribute__((minsize))   /* control-rate code: RAM is short */
+#else
+#define SMALL
+#endif
 
 /* the multi-mode styles (Vital's SynthFilter::Style, minus shelving) */
 enum { ST_12, ST_24, ST_NOTCH_BLEND, ST_NOTCH_SPREAD, ST_BPN };
 
-/* the ramps' base index and count per model */
+/* the ramps' base index and count per model; in each model's order, the ones that follow the cutoff come first (they
+ * step every sample: LOOP's NF) */
 static const uint8_t RB[FLT_N] = {9, 13, 9, 9, 15, 16, 5, 33};
 static const uint8_t NR[FLT_N] = {10, 11, 8, 14, 7, 16, 7, 6};
 /* ANALOG ramps */
 enum { SK_G, SK_DN, SK_RN, SK_PN, SK_LO, SK_BA, SK_HI, SK_ML, SK_MB, SK_MH };
 /* DIRTY */
-enum { DT_G, DT_NORM, DT_RFM, DT_DRV, DT_PN, DT_LO, DT_BA, DT_HI, DT_ML, DT_MB, DT_MH };
+enum { DT_G, DT_RFM, DT_PN, DT_NORM, DT_DRV, DT_LO, DT_BA, DT_HI, DT_ML, DT_MB, DT_MH };
 /* LADDER */
 enum { LD_G, LD_DN, LD_KN, LD_T0 };
 /* DIGITAL */
 enum { SV_A1, SV_A2, SV_A3, SV_P1, SV_P2, SV_P3, SV_DRV, SV_POST, SV_B10, SV_B11, SV_B12, SV_B20, SV_B21, SV_B22 };
 /* DIODE */
-enum { DD_GH, DD_HN, DD_HPA, DD_G, DD_DRV, DD_RES, DD_POST };
+enum { DD_G, DD_GH, DD_HN, DD_HPA, DD_DRV, DD_RES, DD_POST };
 /* COMB */
 enum { CB_PER, CB_FB, CB_SCALE, CB_G1, CB_G2, CB_LO, CB_HI };
 /* PHASER */
@@ -61,6 +67,7 @@ enum { PH_A, PH_RES, PH_DRV, PH_P1, PH_P3, PH_P5 };
 #define PH_GLO 45
 #define PH_GHI 46
 #define G20 0.00142276f                  /* the diode's 20 Hz feedback high pass: G at 20 Hz */
+#define DIRTY_MAXHZ 14000.0f             /* DIRTY's loop is closed through last sample's states: chaotic above */
 
 /* ------------------------------------------------------------------ helpers --- */
 /* tanh-like soft clip: x - 4/27 x^3 on [-1.5, 1.5], +-1 beyond (slope 1 at 0, 0 at the knee) */
@@ -94,19 +101,22 @@ INL int16_t q16(float x)
     return (int16_t)x;
 }
 
-static RAMC NOIN float r_hz(float note) { return note_hz(note); }
+static RAMC NOIN SMALL float r_hz(float note) { return note_hz(note); }
 /* g = tan(pi hz / fs) for hz in [1, MAXHZ] */
-static RAMC NOIN float r_g(float hz)
+static RAMC NOIN SMALL float r_g(float hz)
 {
     hz = hz < 1.0f ? 1.0f : hz > MAXHZ ? MAXHZ : hz;
     return fm_tanf(FM_PI * ISR * hz);
 }
-static RAMC NOIN float r_sqrt(float x) { return fm_sqrtf(x); }
+static RAMC NOIN SMALL float r_sqrt(float x) { return fm_sqrtf(x); }
+static RAMC NOIN SMALL float r_exp2(float x) { return fm_exp2f(x); }
+static RAMC NOIN SMALL float r_sin(float x) { return fm_sinf(x); }
+#define r_db(db) r_exp2((db) * 0.16609640474f)
 INL float GG(float g) { return g / (1.0f + g); }
 
 /* Vital's blend amounts for the multi-mode styles (setupFilter in sallen_key / digital_svf / dirty): b is Vital's
  * blend -1..1; returns the drive, from base (the plain drive) and scaled (the resonance-compensated one) */
-INL float mm_blend(int style, float b, float base, float scaled, float *lo, float *ba, float *hi)
+static RAMC NOIN SMALL float mm_blend(int style, float b, float base, float scaled, float *lo, float *ba, float *hi)
 {
     float t, dt;
     switch (style) {
@@ -150,7 +160,8 @@ static const float VOWEL[5][4][3] = {
     {{0, 0.7f, 65.0382167797f}, {-20, 0.75f, 74.3695077237f}, {-17, 1.0f, 100.408607741f}, {-14, 1.0f, 101.645729657f}},
 };
 enum { V_A, V_E, V_I, V_O, V_U };
-/* the pad's corners: bottom left, bottom right, top left, top right */
+/* the pad's corners: bottom left, bottom right, top left, top right, as the styles' names read (Vital's own table
+ * gives its "AOIE" style the A I U O corners and the other way round) */
 static const uint8_t PAD[2][4] = {{V_A, V_O, V_I, V_E}, {V_A, V_I, V_U, V_O}};
 /* the comb styles: feedback (0 comb, 1 flange +, 2 flange -) and filter (0 low-high, 1 low-band, 2 band spread) */
 static const uint8_t COMB_FB[9] = {0, 0, 0, 1, 1, 1, 2, 2, 2};
@@ -163,10 +174,10 @@ typedef struct {
 } fp_t;
 
 /* the coefficient targets for this block (Vital's setupFilter, per model) */
-static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float note, fp_t *p)
+static RAMC NOIN SMALL void params(int model, int style, const filt_ctl_t *c, float note, fp_t *p)
 {
     float reso = clampf(c->reso, 0.0f, 1.0f), bl = clampf(c->blend, 0.0f, 1.0f);
-    float ddb = 20.0f * clampf(c->drive, 0.0f, 1.0f), dlin = db_gain(ddb), dpct = ddb * (1.0f / 36.0f);
+    float ddb = 20.0f * clampf(c->drive, 0.0f, 1.0f), dlin = r_db(ddb), dpct = ddb * (1.0f / 36.0f);
     float b = 2.0f * bl - 1.0f, hz = r_hz(note), *t = p->t, *a = p->a;
     float g, G, lo, ba, hi;
 
@@ -203,7 +214,7 @@ static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float no
     }
     case FLT_DIRTY: {                    /* dirty_filter.cpp */
         float r = r_sqrt(reso), rin, res, rs2, base;
-        g = r_g(hz);
+        g = r_g(fm_minf(hz, DIRTY_MAXHZ));
         G = GG(g);
         rin = clampf(r / fm_maxf(1.0f, 0.5f * G + 0.97f), 0.0f, 1.0f);
         res = lerpf(0.1f, 2.15f, rin) + dpct * 0.05f;
@@ -231,7 +242,7 @@ static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float no
     case FLT_LADDER: {                   /* ladder_filter.cpp (setStageScales) */
         static const float LP12[5] = {0, 0, 1, 0, 0}, BP12[5] = {0, 1, -1, 0, 0}, HP12[5] = {1, -2, 1, 0, 0};
         static const float LP24[5] = {0, 0, 0, 0, 1}, BP24[5] = {0, 0, -1, 2, -1}, HP24[5] = {1, -4, 6, -4, 1};
-        float ra = style ? fm_sinf(reso * (0.5f * FM_PI)) : reso, k, dm, rsc, drive, post, bp, lp, hp, k4;
+        float ra = style ? r_sin(reso * (0.5f * FM_PI)) : reso, k, dm, rsc, drive, post, bp, lp, hp, k4;
         int i;
         g = r_g(fm_minf(hz, 20000.0f));
         G = GG(g);
@@ -239,7 +250,7 @@ static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float no
         bp = r_sqrt(fm_maxf(1.0f - b * b, 0.0f));
         lp = fm_maxf(-b, 0.0f);
         hp = fm_maxf(b, 0.0f);
-        dm = style ? fm_sinf(reso) + 1.0f : reso + 1.0f;
+        dm = style ? r_sin(reso) + 1.0f : reso + 1.0f;
         rsc = lerpf(dm, 1.0f, hp);
         drive = dlin * rsc;
         post = 1.0f / r_sqrt((dlin - 1.0f) * 0.5f + 1.0f);
@@ -321,7 +332,7 @@ static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float no
             ratio = 0.5f;
             t[DD_HPA] = bl * bl;
         } else {                         /* low cut: the high pass moves from 9 octaves down to 1 */
-            ratio = fm_exp2f(bl * 8.0f - 9.0f);
+            ratio = r_exp2(bl * 8.0f - 9.0f);
             t[DD_HPA] = 1.0f;
         }
         gh = r_g(hz * ratio);
@@ -355,7 +366,7 @@ static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float no
             t[4 * i] = g * D * d;                 /* the SVF's band output as a biquad, the drive folded in */
             t[4 * i + 1] = 2.0f * (g * g - 1.0f) * D;
             t[4 * i + 2] = (1.0f - g * k + g * g) * D;
-            t[4 * i + 3] = db_gain(clampf(v[0], -15.0f, 15.0f));
+            t[4 * i + 3] = r_db(clampf(v[0], -15.0f, 15.0f));
         }
         break;
     }
@@ -416,7 +427,7 @@ static RAMC NOIN void params(int model, int style, const filt_ctl_t *c, float no
 }
 
 /* ------------------------------------------------------------------ control --- */
-RAMC void filt_reset(filt_t *f, int model, int style)
+RAMC SMALL void filt_reset(filt_t *f, int model, int style)
 {
     uint32_t i;
     if (model < 0 || model >= FLT_N)
@@ -433,7 +444,7 @@ RAMC void filt_reset(filt_t *f, int model, int style)
     f->style = style;
 }
 
-RAMC void filt_ctl(filt_t *f, const filt_ctl_t *c, uint32_t n)
+RAMC SMALL void filt_ctl(filt_t *f, const filt_ctl_t *c, uint32_t n)
 {
     fp_t p;
     int model = f->model, style = f->style, prime = !(f->w & PRIMED), i, nr, rb;
@@ -444,7 +455,7 @@ RAMC void filt_ctl(filt_t *f, const filt_ctl_t *c, uint32_t n)
         if (prime)
             f->s[0] = note;
         else
-            f->s[0] += (note - f->s[0]) * (1.0f - fm_expf(-(float)n * NOTE_TAU));
+            f->s[0] += (note - f->s[0]) * (1.0f - r_exp2(-(float)n * (NOTE_TAU * FM_LOG2E)));
         note = f->s[0];
     }
     params(model, style, c, note, &p);
@@ -469,28 +480,52 @@ RAMC void filt_ctl(filt_t *f, const filt_ctl_t *c, uint32_t n)
 }
 
 /* ---------------------------------------------------------------------- run --- */
-/* ramps: the block's coefficients, moved a step per sample */
+/* Each model runs one channel per call (called for L, then R): the states and the ramps live in locals (registers or
+ * the stack, never aliased by the audio), the sample loop is not unrolled (RAM is short), and the 12 / 24 dB variants
+ * share one loop with a per-sample flag. The ramps are stepped in each channel's pass (a few adds a sample). */
+#if defined(__clang__)
+#define NOUNROLL _Pragma("clang loop unroll(disable)")
+#else
+#define NOUNROLL
+#endif
 #define RAMP_LOAD(N)                                                                                                  \
     float cv[N], dv[N];                                                                                               \
     int ri;                                                                                                           \
     for (ri = 0; ri < N; ri++) {                                                                                      \
-        cv[ri] = f->s[RB[f->model] + ri];                                                                             \
-        dv[ri] = f->s[RB[f->model] + N + ri];                                                                         \
+        cv[ri] = r[ri];                                                                                               \
+        dv[ri] = r[N + ri];                                                                                           \
     }
-#define RAMP_STEP(N)                                                                                                  \
-    for (ri = 0; ri < N; ri++)                                                                                        \
-        cv[ri] += dv[ri];
+/* the sample loop: the first NF ramps step every sample, the rest every SUB samples (by m steps, at the sub-block's
+ * start) */
+#define SUB 8u
+#define LOOP(N, NF)                                                                                                   \
+    for (i = 0; i < n;) {                                                                                             \
+        uint32_t m_ = n - i < SUB ? n - i : SUB, e_ = i + m_;                                                         \
+        float fm_ = (float)m_;                                                                                        \
+        for (ri = NF; ri < N; ri++)                                                                                   \
+            cv[ri] += dv[ri] * fm_;                                                                                   \
+        NOUNROLL                                                                                                      \
+        for (; i < e_; i++) {                                                                                         \
+            for (ri = 0; ri < NF; ri++)                                                                               \
+                cv[ri] += dv[ri];
+#define END_LOOP }
 #define RAMP_STORE(N)                                                                                                 \
-    for (ri = 0; ri < N; ri++)                                                                                        \
-        f->s[RB[f->model] + ri] = cv[ri];
+    if (ch)                              /* (both channels start from the block's start) */                           \
+        for (ri = 0; ri < N; ri++)                                                                                    \
+            r[ri] = cv[ri];
 
-/* clear the states if any went non-finite (or huge) */
+/* end of block: flush the states that decayed to nothing (-300 dB: they would go on through the denormals), and
+ * clear them all if any went non-finite (or huge) */
 INL void guard(float *s, int n)
 {
-    float m = 0.0f;
+    float m = 0.0f, a;
     int i;
-    for (i = 0; i < n; i++)
-        m += fm_fabsf(s[i]);
+    for (i = 0; i < n; i++) {
+        a = fm_fabsf(s[i]);
+        if (a < 1e-15f)
+            s[i] = 0.0f;
+        m += a;
+    }
     if (!(m < 1e6f))
         for (i = 0; i < n; i++)
             s[i] = 0.0f;
@@ -499,246 +534,233 @@ INL void guard(float *s, int n)
 /* ANALOG: Vital's SallenKeyFilter. Two TPT one-poles with the band output fed back (positive: Q = 1 / (2 - res)),
  * solved without delay, then tanh (here the cubic sat) on the stage input. 24 dB styles: a flat (Q 1) pre-stage
  * mixed by the same blend; Notch Spread swaps the amounts between the stages. */
-INL float sk_stage(float *s1, float *s2, float x, float G, float m1, float m2, float dn, float rn,
-                   float l, float b, float h)
+static RAMC NOIN void run_analog(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float in1 = sat(dn * x - rn * (m1 * *s1 + m2 * *s2)), y1 = tpt(s1, in1, G), y2 = tpt(s2, y1, G);
-    float bp = y1 - y2;
-    return l * y2 + b * bp + h * (in1 - y1 - bp);
-}
-INL float sk_pre(float *s1, float *s2, float x, float G, float m1, float m2, float pn, float l, float b, float h)
-{
-    float in1 = (x - (m1 * *s1 + m2 * *s2)) * pn, y1 = tpt(s1, in1, G), y2 = tpt(s2, y1, G), bp = y1 - y2;
-    return l * y2 + b * bp + h * (in1 - y1 - bp);
-}
-static RAMC NOIN void run_analog(filt_t *f, float *L, float *R, uint32_t n)
-{
-    float *s = f->s + 1;
+    float *s = f->s + 1 + 4 * ch, *r = f->s + 9;
+    float s1 = s[0], s2 = s[1], p1 = s[2], p2 = s[3];
+    int pre = f->style != ST_12;
     uint32_t i;
     RAMP_LOAD(10)
-    if (f->style == ST_12) {
-        for (i = 0; i < n; i++) {
-            float m2, m1;
-            RAMP_STEP(10)
-            m2 = 1.0f - cv[SK_G];
-            m1 = -m2 * m2;
-            L[i] = sk_stage(&s[0], &s[1], L[i] + DNO, cv[SK_G], m1, m2, cv[SK_DN], cv[SK_RN], cv[SK_ML], cv[SK_MB],
-                            cv[SK_MH]);
-            R[i] = sk_stage(&s[2], &s[3], R[i] + DNO, cv[SK_G], m1, m2, cv[SK_DN], cv[SK_RN], cv[SK_ML], cv[SK_MB],
-                            cv[SK_MH]);
+    LOOP(10, 4)
+        float G, m2, m1, in, y1, y2, bp;
+        G = cv[SK_G];
+        m2 = 1.0f - G;
+        m1 = -m2 * m2;
+        in = x[i];
+        if (pre) {
+            in = (in - (m1 * p1 + m2 * p2)) * cv[SK_PN];
+            y1 = tpt(&p1, in, G);
+            y2 = tpt(&p2, y1, G);
+            bp = y1 - y2;
+            in = cv[SK_LO] * y2 + cv[SK_BA] * bp + cv[SK_HI] * (in - y1 - bp);
         }
-    } else {
-        for (i = 0; i < n; i++) {
-            float m2, m1, pl, pr;
-            RAMP_STEP(10)
-            m2 = 1.0f - cv[SK_G];
-            m1 = -m2 * m2;
-            pl = sk_pre(&s[4], &s[5], L[i] + DNO, cv[SK_G], m1, m2, cv[SK_PN], cv[SK_LO], cv[SK_BA], cv[SK_HI]);
-            pr = sk_pre(&s[6], &s[7], R[i] + DNO, cv[SK_G], m1, m2, cv[SK_PN], cv[SK_LO], cv[SK_BA], cv[SK_HI]);
-            L[i] = sk_stage(&s[0], &s[1], pl, cv[SK_G], m1, m2, cv[SK_DN], cv[SK_RN], cv[SK_ML], cv[SK_MB],
-                            cv[SK_MH]);
-            R[i] = sk_stage(&s[2], &s[3], pr, cv[SK_G], m1, m2, cv[SK_DN], cv[SK_RN], cv[SK_ML], cv[SK_MB],
-                            cv[SK_MH]);
-        }
+        in = sat(cv[SK_DN] * in - cv[SK_RN] * (m1 * s1 + m2 * s2));
+        y1 = tpt(&s1, in, G);
+        y2 = tpt(&s2, y1, G);
+        bp = y1 - y2;
+        x[i] = cv[SK_ML] * y2 + cv[SK_MB] * bp + cv[SK_MH] * (in - y1 - bp);
     }
+    END_LOOP
     RAMP_STORE(10)
-    guard(s, 8);
+    s[0] = s1;
+    s[1] = s2;
+    s[2] = p1;
+    s[3] = p2;
+    guard(s, 4);
 }
 
 /* DIRTY: Vital's DirtyFilter. A plain 2-pole (no feedback) shaped by the blend, then a saturated loop: the loop's
  * tanh output, low passed (stage 3) and band passed (stage 4, both quickTanh one-poles), comes back with the
  * resonance; the output is the loop's tanh, so it is level-limited (~0.71 peak). In Vital the 24 dB pre-stage's
  * feedback reads states its one-poles never write (always 0), so it is a plain 2-pole: kept as it sounds. */
-INL float dirty_stage(float *s, float x, const float *cv)
+static RAMC NOIN void run_dirty(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float G = cv[DT_G], si = cv[DT_NORM] * x, y1 = tpt(&s[0], si, G), y2 = tpt(&s[1], y1, G), bp = y1 - y2;
-    float pass = cv[DT_ML] * y2 + cv[DT_MB] * bp + cv[DT_MH] * (si - y1 - bp);
-    float z3 = sat(s[2]), z4 = sat(s[3]), loop, d3, y3;
-    loop = sat(cv[DT_DRV] * pass + cv[DT_RFM] * (z4 + pass + G * (pass - z3)));
-    d3 = G * (loop - z3);
-    s[2] += d3;
-    y3 = sat(s[2]);
-    s[2] += d3;
-    s[3] += 2.0f * G * (loop - y3 - z4);
-    return loop * (1.0f / 1.4f);
-}
-INL float dirty_pre(float *p, float x, const float *cv)
-{
-    float pin = cv[DT_PN] * x, y1 = tpt(&p[0], pin, cv[DT_G]), y2 = tpt(&p[1], y1, cv[DT_G]), bp = y1 - y2;
-    return cv[DT_LO] * y2 + cv[DT_BA] * bp + cv[DT_HI] * (pin - y1 - bp);
-}
-static RAMC NOIN void run_dirty(filt_t *f, float *L, float *R, uint32_t n)
-{
-    float *s = f->s + 1;                 /* L: s1 s2 s3 s4, R: the same, then L p1 p2, R p1 p2 */
+    float *s = f->s + 1 + 6 * ch, *r = f->s + 13;
+    float s1 = s[0], s2 = s[1], s3 = s[2], s4 = s[3], p1 = s[4], p2 = s[5];
+    int pre = f->style != ST_12;
     uint32_t i;
     RAMP_LOAD(11)
-    if (f->style == ST_12) {
-        for (i = 0; i < n; i++) {
-            RAMP_STEP(11)
-            L[i] = dirty_stage(&s[0], L[i] + DNO, cv);
-            R[i] = dirty_stage(&s[4], R[i] + DNO, cv);
+    LOOP(11, 3)
+        float G, in, y1, y2, bp, pass, z3, z4, loop, d3, y3;
+        G = cv[DT_G];
+        in = x[i];
+        if (pre) {
+            in *= cv[DT_PN];
+            y1 = tpt(&p1, in, G);
+            y2 = tpt(&p2, y1, G);
+            bp = y1 - y2;
+            in = cv[DT_LO] * y2 + cv[DT_BA] * bp + cv[DT_HI] * (in - y1 - bp);
         }
-    } else {
-        for (i = 0; i < n; i++) {
-            RAMP_STEP(11)
-            L[i] = dirty_stage(&s[0], dirty_pre(&s[8], L[i] + DNO, cv), cv);
-            R[i] = dirty_stage(&s[4], dirty_pre(&s[10], R[i] + DNO, cv), cv);
-        }
+        in *= cv[DT_NORM];
+        y1 = tpt(&s1, in, G);
+        y2 = tpt(&s2, y1, G);
+        bp = y1 - y2;
+        pass = cv[DT_ML] * y2 + cv[DT_MB] * bp + cv[DT_MH] * (in - y1 - bp);
+        z3 = sat(s3);
+        z4 = sat(s4);
+        loop = sat(cv[DT_DRV] * pass + cv[DT_RFM] * (z4 + pass + G * (pass - z3)));
+        d3 = G * (loop - z3);
+        s3 += d3;
+        y3 = sat(s3);
+        s3 += d3;
+        s4 += 2.0f * G * (loop - y3 - z4);
+        x[i] = loop * (1.0f / 1.4f);
     }
+    END_LOOP
     RAMP_STORE(11)
-    guard(s, 12);
+    s[0] = s1;
+    s[1] = s2;
+    s[2] = s3;
+    s[3] = s4;
+    s[4] = p1;
+    s[5] = p2;
+    guard(s, 6);
 }
 
 /* LADDER: Vital's LadderFilter, as a zero-delay-feedback 4-pole ladder: the loop is solved for the input (k = 4
  * oscillates at every cutoff, where Vital's one-sample estimate needs its 2x rate), then saturated; the output mixes
  * the input and the four stages by Vital's stage scales (12 / 24 dB, notch blend / spread, B/P/N). Vital's stages
  * also saturate (algebraicSat): here only the input does. */
-INL float ladder_tick(float *s, float x, const float *cv)
+static RAMC NOIN void run_ladder(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float G = cv[LD_G], S = ((s[0] * G + s[1]) * G + s[2]) * G + s[3];
-    float u = sat(cv[LD_DN] * x - cv[LD_KN] * S), y1 = tpt(&s[0], u, G), y2 = tpt(&s[1], y1, G),
-          y3 = tpt(&s[2], y2, G), y4 = tpt(&s[3], y3, G);
-    return cv[LD_T0] * u + cv[LD_T0 + 1] * y1 + cv[LD_T0 + 2] * y2 + cv[LD_T0 + 3] * y3 + cv[LD_T0 + 4] * y4;
-}
-static RAMC NOIN void run_ladder(filt_t *f, float *L, float *R, uint32_t n)
-{
-    float *s = f->s + 1;
+    float *s = f->s + 1 + 4 * ch, *r = f->s + 9;
+    float s0 = s[0], s1 = s[1], s2 = s[2], s3 = s[3];
     uint32_t i;
     RAMP_LOAD(8)
-    for (i = 0; i < n; i++) {
-        RAMP_STEP(8)
-        L[i] = ladder_tick(&s[0], L[i] + DNO, cv);
-        R[i] = ladder_tick(&s[4], R[i] + DNO, cv);
+    LOOP(8, 3)
+        float G, u, y1, y2, y3, y4;
+        G = cv[LD_G];
+        u = sat(cv[LD_DN] * (x[i]) - cv[LD_KN] * (((s0 * G + s1) * G + s2) * G + s3));
+        y1 = tpt(&s0, u, G);
+        y2 = tpt(&s1, y1, G);
+        y3 = tpt(&s2, y2, G);
+        y4 = tpt(&s3, y3, G);
+        x[i] = cv[LD_T0] * u + cv[LD_T0 + 1] * y1 + cv[LD_T0 + 2] * y2 + cv[LD_T0 + 3] * y3 + cv[LD_T0 + 4] * y4;
     }
+    END_LOOP
     RAMP_STORE(8)
-    guard(s, 8);
+    s[0] = s0;
+    s[1] = s1;
+    s[2] = s2;
+    s[3] = s3;
+    guard(s, 4);
 }
 
 /* DIGITAL: Vital's DigitalSvf, the TPT state variable filter (Q 0.5..16, cubed resonance) mixed as
- * v0 in + v1 band + v2 low, hard-tanh on the output; 24 dB: a Q 1 pre-stage, hard-tanh, the main stage. */
-INL void svf(float *ic, float x, float a1, float a2, float a3, float *v1, float *v2)
+ * v0 in + v1 band + v2 low, hard-tanh on the output; 24 dB: a Q 1 pre-stage (mixed with the main stage's k, as
+ * Vital), hard-tanh, the main stage. */
+static RAMC NOIN void run_digital(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float v3 = x - ic[1];
-    *v1 = a1 * ic[0] + a2 * v3;
-    *v2 = ic[1] + a2 * ic[0] + a3 * v3;
-    ic[0] = 2.0f * *v1 - ic[0];
-    ic[1] = 2.0f * *v2 - ic[1];
-}
-INL float dsv12(float *ic, float x, const float *cv)
-{
-    float in = cv[SV_DRV] * x, v1, v2;
-    svf(ic, in, cv[SV_A1], cv[SV_A2], cv[SV_A3], &v1, &v2);
-    return hclip(cv[SV_B10] * in + cv[SV_B11] * v1 + cv[SV_B12] * v2) * cv[SV_POST];
-}
-INL float dsv24(float *ic, float *pc, float x, const float *cv)
-{
-    float in = cv[SV_DRV] * x, v1, v2, d;
-    svf(pc, in, cv[SV_P1], cv[SV_P2], cv[SV_P3], &v1, &v2);
-    d = hclip(cv[SV_B10] * in + cv[SV_B11] * v1 + cv[SV_B12] * v2);
-    svf(ic, d, cv[SV_A1], cv[SV_A2], cv[SV_A3], &v1, &v2);
-    return hclip(cv[SV_B20] * d + cv[SV_B21] * v1 + cv[SV_B22] * v2) * cv[SV_POST];
-}
-static RAMC NOIN void run_digital(filt_t *f, float *L, float *R, uint32_t n)
-{
-    float *s = f->s + 1;
+    float *s = f->s + 1 + 4 * ch, *r = f->s + 9;
+    float ic1 = s[0], ic2 = s[1], pc1 = s[2], pc2 = s[3];
+    int pre = f->style != ST_12;
     uint32_t i;
     RAMP_LOAD(14)
-    if (f->style == ST_12) {
-        for (i = 0; i < n; i++) {
-            RAMP_STEP(14)
-            L[i] = dsv12(&s[0], L[i] + DNO, cv);
-            R[i] = dsv12(&s[2], R[i] + DNO, cv);
+    LOOP(14, 6)
+        float in, v1, v2, v3, o;
+        in = cv[SV_DRV] * (x[i]);
+        if (pre) {
+            v3 = in - pc2;
+            v1 = cv[SV_P1] * pc1 + cv[SV_P2] * v3;
+            v2 = pc2 + cv[SV_P2] * pc1 + cv[SV_P3] * v3;
+            pc1 = 2.0f * v1 - pc1;
+            pc2 = 2.0f * v2 - pc2;
+            in = hclip(cv[SV_B10] * in + cv[SV_B11] * v1 + cv[SV_B12] * v2);
         }
-    } else {
-        for (i = 0; i < n; i++) {
-            RAMP_STEP(14)
-            L[i] = dsv24(&s[0], &s[4], L[i] + DNO, cv);
-            R[i] = dsv24(&s[2], &s[6], R[i] + DNO, cv);
-        }
+        v3 = in - ic2;
+        v1 = cv[SV_A1] * ic1 + cv[SV_A2] * v3;
+        v2 = ic2 + cv[SV_A2] * ic1 + cv[SV_A3] * v3;
+        ic1 = 2.0f * v1 - ic1;
+        ic2 = 2.0f * v2 - ic2;
+        o = cv[SV_B20] * in + cv[SV_B21] * v1 + cv[SV_B22] * v2;
+        x[i] = hclip(o) * cv[SV_POST];
     }
+    END_LOOP
     RAMP_STORE(14)
-    guard(s, 8);
+    s[0] = ic1;
+    s[1] = ic2;
+    s[2] = pc1;
+    s[3] = pc2;
+    guard(s, 4);
 }
 
 /* DIODE: Vital's DiodeFilter. A Q 1 high pass (low shelf: an octave under the cutoff, faded in by the blend; low cut:
  * moved by the blend), then the diode ladder: tanh input with the last stage fed back, stage 1 (tanh) driven by the
  * input plus stage 2 through a 20 Hz high pass, stages 2 and 3 averaging their neighbours, stage 4 clamped. */
-INL float diode_tick(float *s, float x, const float *cv, int hp)
+static RAMC NOIN void run_diode(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float G = cv[DD_G], c4, t, fbin, fo, z1, d, y1, y2, y3, y4;
-    if (hp) {
-        float Gh = cv[DD_GH], m2 = 1.0f - Gh, hin = (x - (-m2 * m2 * s[0] + m2 * s[1])) * cv[DD_HN];
-        float h1 = tpt(&s[0], hin, Gh), h2 = tpt(&s[1], h1, Gh);
-        x += cv[DD_HPA] * (hin - 2.0f * h1 + h2 - x);
-    }
-    c4 = clampf(s[6], -1.0f, 1.0f);
-    t = sat(cv[DD_DRV] * x - cv[DD_RES] * c4);
-    fbin = t + s[4];
-    fo = tpt(&s[2], fbin, G20);
-    z1 = sat(s[3]);
-    d = G * (fbin - fo - z1);
-    s[3] += d;
-    y1 = sat(s[3]);
-    s[3] += d;
-    y2 = tpt(&s[4], (y1 + s[5]) * 0.5f, G);
-    y3 = tpt(&s[5], (y2 + c4) * 0.5f, G);
-    d = G * (y3 - c4);
-    s[6] += d;
-    y4 = clampf(s[6], -1.0f, 1.0f);
-    s[6] += d;
-    return y4 * cv[DD_POST];
-}
-static RAMC NOIN void run_diode(filt_t *f, float *L, float *R, uint32_t n)
-{
-    float *s = f->s + 1;                 /* per channel: h1 h2 fb s1 s2 s3 s4 */
+    float *s = f->s + 1 + 7 * ch, *r = f->s + 15;
+    float h1 = s[0], h2 = s[1], fl = s[2], s1 = s[3], s2 = s[4], s3 = s[5], s4 = s[6];
+    int hp;
     uint32_t i;
     RAMP_LOAD(7)
-    if (cv[DD_HPA] == 0.0f && dv[DD_HPA] == 0.0f) {
-        for (i = 0; i < n; i++) {
-            RAMP_STEP(7)
-            L[i] = diode_tick(&s[0], L[i] + DNO, cv, 0);
-            R[i] = diode_tick(&s[7], R[i] + DNO, cv, 0);
+    hp = cv[DD_HPA] != 0.0f || dv[DD_HPA] != 0.0f;
+    LOOP(7, 3)
+        float G, in, c4, t, fbin, fo, z1, d, y1, y2, y3;
+        G = cv[DD_G];
+        in = x[i];
+        if (hp) {
+            float Gh = cv[DD_GH], m2 = 1.0f - Gh, hin = (in - (m2 * h2 - m2 * m2 * h1)) * cv[DD_HN], a, b;
+            a = tpt(&h1, hin, Gh);
+            b = tpt(&h2, a, Gh);
+            in += cv[DD_HPA] * (hin - 2.0f * a + b - in);
         }
-    } else {
-        for (i = 0; i < n; i++) {
-            RAMP_STEP(7)
-            L[i] = diode_tick(&s[0], L[i] + DNO, cv, 1);
-            R[i] = diode_tick(&s[7], R[i] + DNO, cv, 1);
-        }
+        c4 = clampf(s4, -1.0f, 1.0f);
+        t = sat(cv[DD_DRV] * in - cv[DD_RES] * c4);
+        fbin = t + s2;
+        fo = tpt(&fl, fbin, G20);
+        z1 = sat(s1);
+        d = G * (fbin - fo - z1);
+        s1 += d;
+        y1 = sat(s1);
+        s1 += d;
+        y2 = tpt(&s2, (y1 + s3) * 0.5f, G);
+        y3 = tpt(&s3, (y2 + c4) * 0.5f, G);
+        d = G * (y3 - c4);
+        s4 += d;
+        x[i] = clampf(s4, -1.0f, 1.0f) * cv[DD_POST];
+        s4 += d;
     }
+    END_LOOP
     RAMP_STORE(7)
-    guard(s, 14);
+    s[0] = h1;
+    s[1] = h2;
+    s[2] = fl;
+    s[3] = s1;
+    s[4] = s2;
+    s[5] = s3;
+    s[6] = s4;
+    guard(s, 7);
 }
 
 /* FORMANT: Vital's FormantFilter: four DigitalSvf band passes (Q 4..30) at the vowel pad's formants, each hard-tanh'd
  * and weighted by its gain. Each band pass is its exact biquad (transposed direct form II): same response, half the
  * work. The blend is Vital's formant spread (-1..1: formants pulled to / pushed from MIDI 80), the resonance Vital's
  * formant resonance (0.3..1). */
-INL float formant_tick(float *z, float x, const float *cv)
+static RAMC NOIN void run_formant(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float o = 0.0f;
-    int i;
-    for (i = 0; i < 4; i++) {
-        float bx = cv[4 * i] * x, y = bx + z[0];
-        z[0] = z[1] - cv[4 * i + 1] * y;
-        z[1] = -bx - cv[4 * i + 2] * y;
-        o += cv[4 * i + 3] * hclip(y);
-        z += 2;
-    }
-    return o;
-}
-static RAMC NOIN void run_formant(filt_t *f, float *L, float *R, uint32_t n)
-{
-    float *s = f->s;                     /* L: 4 x (z1 z2), then R */
+    float *s = f->s + 8 * ch, *r = f->s + 16, z[8];
     uint32_t i;
+    int k;
     RAMP_LOAD(16)
-    for (i = 0; i < n; i++) {
-        RAMP_STEP(16)
-        L[i] = formant_tick(&s[0], L[i] + DNO, cv);
-        R[i] = formant_tick(&s[8], R[i] + DNO, cv);
+    for (k = 0; k < 8; k++)
+        z[k] = s[k];
+    LOOP(16, 0)
+        float in = x[i], o = 0.0f;
+        NOUNROLL
+        for (k = 0; k < 4; k++) {
+            float bx = cv[4 * k] * in, y = bx + z[2 * k];
+            z[2 * k] = z[2 * k + 1] - cv[4 * k + 1] * y;
+            z[2 * k + 1] = -bx - cv[4 * k + 2] * y;
+            o += cv[4 * k + 3] * hclip(y);
+        }
+        x[i] = o;
     }
+    END_LOOP
     RAMP_STORE(16)
-    guard(s, 16);
+    for (k = 0; k < 8; k++)
+        s[k] = z[k];
+    guard(s, 8);
 }
 
 /* COMB: Vital's CombFilter, a delay of one period of the cutoff (Catmull-Rom read) with two one-poles in the loop:
@@ -746,131 +768,133 @@ static RAMC NOIN void run_formant(filt_t *f, float *L, float *R, uint32_t n)
  * around that, the blend its width: 0..8 octaves), low-band (added: the band narrows from a low pass to a band);
  * comb (feedback -1..1 by the resonance), flange + / - (feedback 0..1, the dry mixed in; - reads half a period and
  * subtracts). */
-static RAMC NOIN void run_comb(filt_t *f, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_comb(filt_t *f, float *restrict x, uint32_t n, int ch)
 {
-    float *s = f->s + 1;
+    float *s = f->s + 1 + 2 * ch, *r = f->s + 5;
+    float l1s = s[0], l2s = s[1];
     int fb = COMB_FB[f->style < 9 ? f->style : 0];
+    float half = fb == 2 ? 0.5f : 1.0f, sg = fb == 2 ? -1.0f : 1.0f;
     uint32_t i, w = f->w & WMASK;
-    int16_t *bl = f->line[0], *br = f->line[1];
+    int16_t *restrict b = f->line[ch];
     RAMP_LOAD(7)
-    for (i = 0; i < n; i++) {
-        float D, t, t2, t3, w0, w1, w2, w3, rl, rr, x[2], r[2], out[2];
-        uint32_t k, j0, j1, j2, j3;
-        int c;
-        RAMP_STEP(7)
-        D = fb == 2 ? cv[CB_PER] * 0.5f : cv[CB_PER];
+    LOOP(7, 1)
+        float D, t, t2, t3, rd, in, l1, st1, fo, push;
+        uint32_t k;
+        D = cv[CB_PER] * half;
         k = (uint32_t)(int32_t)D;
-        t = D - (float)k;
+        t = D - (float)(int32_t)k;
         t2 = t * t;
         t3 = t2 * t;
-        w0 = (-t + 2.0f * t2 - t3) * (0.5f / 16384.0f);
-        w1 = (2.0f - 5.0f * t2 + 3.0f * t3) * (0.5f / 16384.0f);
-        w2 = (t + 4.0f * t2 - 3.0f * t3) * (0.5f / 16384.0f);
-        w3 = (t3 - t2) * (0.5f / 16384.0f);
-        j0 = (w - k + 1u) & WMASK;
-        j1 = (w - k) & WMASK;
-        j2 = (w - k - 1u) & WMASK;
-        j3 = (w - k - 2u) & WMASK;
-        rl = w0 * (float)bl[j0] + w1 * (float)bl[j1] + w2 * (float)bl[j2] + w3 * (float)bl[j3];
-        rr = w0 * (float)br[j0] + w1 * (float)br[j1] + w2 * (float)br[j2] + w3 * (float)br[j3];
-        x[0] = L[i] + DNO;
-        x[1] = R[i] + DNO;
-        r[0] = rl;
-        r[1] = rr;
-        for (c = 0; c < 2; c++) {
-            float in, l1, st1, fo, push;
-            in = fb == 0 ? cv[CB_SCALE] * x[c] + r[c] * cv[CB_FB] : r[c];
-            l1 = tpt(&s[2 * c], in, cv[CB_G1]);
-            st1 = cv[CB_LO] * l1 + cv[CB_HI] * (in - l1);
-            fo = st1 - tpt(&s[2 * c + 1], st1, cv[CB_G2]);
-            if (fb == 0) {
-                push = hclip(fo);
-                out[c] = fo;
-            } else {
-                float si = x[c] * 0.70710678f, h = hclip(fo * cv[CB_FB]);
-                push = fb == 1 ? si + h : si - h;
-                out[c] = fb == 1 ? si * cv[CB_SCALE] + fo : si * cv[CB_SCALE] - fo;
-            }
-            f->line[c][w] = q16(push);
+        rd = ((-t + 2.0f * t2 - t3) * (float)b[(w - k + 1u) & WMASK] + (2.0f - 5.0f * t2 + 3.0f * t3) *
+              (float)b[(w - k) & WMASK] + (t + 4.0f * t2 - 3.0f * t3) * (float)b[(w - k - 1u) & WMASK] +
+              (t3 - t2) * (float)b[(w - k - 2u) & WMASK]) * (0.5f / 16384.0f);
+        in = x[i];
+        if (fb == 0)
+            rd = cv[CB_SCALE] * in + rd * cv[CB_FB];
+        l1 = tpt(&l1s, rd, cv[CB_G1]);
+        st1 = cv[CB_LO] * l1 + cv[CB_HI] * (rd - l1);
+        fo = st1 - tpt(&l2s, st1, cv[CB_G2]);
+        if (fb == 0) {
+            push = hclip(fo);
+            x[i] = fo;
+        } else {
+            in *= 0.70710678f;
+            push = in + sg * hclip(fo * cv[CB_FB]);
+            x[i] = in * cv[CB_SCALE] + sg * fo;
         }
-        L[i] = out[0];
-        R[i] = out[1];
+        b[w] = q16(push);
         w = (w + 1u) & WMASK;
     }
+    END_LOOP
     RAMP_STORE(7)
-    f->w = (f->w & PRIMED) | w;
-    guard(s, 4);
+    s[0] = l1s;
+    s[1] = l2s;
+    if (ch)
+        f->w = (f->w & PRIMED) | w;
+    guard(s, 2);
 }
 
 /* PHASER: Vital's PhaserFilter: 3 x 4 first-order all-passes at the cutoff (peaks after 4, 8, 12, mixed by the
  * blend), the output band-limited (cutoff / 20 .. cutoff x 20) and fed back by the resonance, hard-tanh on the input;
  * out = (in +- all-pass) / 2. The all-passes are direct form I (3 operations); stages whose weight is 0 are not run. */
-static RAMC NOIN void run_phaser(filt_t *f, float *L, float *R, uint32_t n)
+/* four all-passes (a - z^-1) / (1 - a z^-1), direct form I: z[k] the input of stage k a sample ago (= the output of
+ * stage k - 1), z[4] the last stage's output a sample ago (the caller stores the new one) */
+INL float ap4(float *z, float in, float a)
 {
-    float *s = f->s + 1, Glo = f->s[PH_GLO], Ghi = f->s[PH_GHI];
+    float y;
+    y = a * (in + z[1]) - z[0];
+    z[0] = in;
+    in = y;
+    y = a * (in + z[2]) - z[1];
+    z[1] = in;
+    in = y;
+    y = a * (in + z[3]) - z[2];
+    z[2] = in;
+    in = y;
+    y = a * (in + z[4]) - z[3];
+    z[3] = in;
+    return y;
+}
+static RAMC NOIN void run_phaser(filt_t *f, float *restrict x, uint32_t n, int ch)
+{
+    float *s = f->s + 1 + 16 * ch, *r = f->s + 33, Glo = f->s[PH_GLO], Ghi = f->s[PH_GHI], z[16];
     float inv = f->style ? -1.0f : 1.0f;
-    int nst, c, j;
+    int nst, j;
     uint32_t i;
     RAMP_LOAD(6)
     nst = (cv[PH_P5] != 0.0f || dv[PH_P5] != 0.0f) ? 12 : (cv[PH_P3] != 0.0f || dv[PH_P3] != 0.0f) ? 8 : 4;
-    for (c = 0; c < 2; c++)              /* stages that do not run restart from rest */
-        for (j = nst + 1; j <= 12; j++)
-            s[16 * c + j] = 0.0f;
-    for (i = 0; i < n; i++) {
-        float *io[2];
-        RAMP_STEP(6)
-        io[0] = &L[i];
-        io[1] = &R[i];
-        for (c = 0; c < 2; c++) {
-            float *z = s + 16 * c, x = *io[c] + DNO, a = cv[PH_A], lows, highs, in, o4, o8 = 0.0f, o12 = 0.0f, y, apo;
-            lows = tpt(&z[13], z[15], Glo);
-            highs = tpt(&z[14], lows, Ghi);
-            in = hclip(cv[PH_DRV] * x + cv[PH_RES] * (lows - highs));
-            for (j = 0; j < 4; j++) {
-                y = a * (in + z[j + 1]) - z[j];
-                z[j] = in;
-                in = y;
-            }
-            o4 = in;
-            if (nst > 4) {
-                for (; j < 8; j++) {
-                    y = a * (in + z[j + 1]) - z[j];
-                    z[j] = in;
-                    in = y;
-                }
-                o8 = in;
-                if (nst > 8) {
-                    for (; j < 12; j++) {
-                        y = a * (in + z[j + 1]) - z[j];
-                        z[j] = in;
-                        in = y;
-                    }
-                    o12 = in;
-                }
-            }
-            z[j] = in;
-            apo = cv[PH_P1] * o4 + cv[PH_P3] * o8 + cv[PH_P5] * o12;
-            z[15] = apo;
-            *io[c] = (x + inv * apo) * 0.5f;
-        }
+    for (j = 0; j < 16; j++)             /* the stages that do not run restart from rest */
+        z[j] = j > nst && j <= 12 ? 0.0f : s[j];
+    LOOP(6, 1)
+        float xi = x[i], a = cv[PH_A], in, o4, o8 = 0.0f, o12 = 0.0f, lows, apo;
+        lows = tpt(&z[13], z[15], Glo);
+        in = hclip(cv[PH_DRV] * xi + cv[PH_RES] * (lows - tpt(&z[14], lows, Ghi)));
+        o4 = ap4(z, in, a);
+        if (nst > 4) {
+            o8 = ap4(z + 4, o4, a);
+            if (nst > 8) {
+                o12 = ap4(z + 8, o8, a);
+                z[12] = o12;
+            } else
+                z[8] = o8;
+        } else
+            z[4] = o4;
+        apo = cv[PH_P1] * o4 + cv[PH_P3] * o8 + cv[PH_P5] * o12;
+        z[15] = apo;
+        x[i] = (xi + inv * apo) * 0.5f;
     }
+    END_LOOP
     RAMP_STORE(6)
-    guard(s, 32);
+    for (j = 0; j < 16; j++)
+        s[j] = z[j];
+    guard(s, 16);
 }
+
+/* filt_run(f, buf, buf, n) (L == R) runs one channel: a mono voice pays half. The R channel's states are kept and
+ * copied to L's, so a later stereo call goes on smoothly (except COMB's L delay line, which the mono calls leave
+ * as it was: reset the filter when a voice goes from mono to stereo). */
+static const uint8_t NSTATE[FLT_N] = {4, 6, 4, 4, 7, 8, 2, 16};
 
 RAMC void filt_run(filt_t *f, float *L, float *R, uint32_t n)
 {
+    int mono = L == R, i, ns, b;
     if (!(f->w & PRIMED))                /* no filt_ctl yet: pass through */
         return;
-    switch (f->model) {
-    case FLT_ANALOG: run_analog(f, L, R, n); break;
-    case FLT_DIRTY: run_dirty(f, L, R, n); break;
-    case FLT_LADDER: run_ladder(f, L, R, n); break;
-    case FLT_DIGITAL: run_digital(f, L, R, n); break;
-    case FLT_DIODE: run_diode(f, L, R, n); break;
-    case FLT_FORMANT: run_formant(f, L, R, n); break;
-    case FLT_COMB: run_comb(f, L, R, n); break;
-    default: run_phaser(f, L, R, n); break;
+    switch (f->model) {                  /* (direct calls: the RAM-code check refuses calls through a pointer) */
+    case FLT_ANALOG: if (!mono) run_analog(f, L, n, 0); run_analog(f, R, n, 1); break;
+    case FLT_DIRTY: if (!mono) run_dirty(f, L, n, 0); run_dirty(f, R, n, 1); break;
+    case FLT_LADDER: if (!mono) run_ladder(f, L, n, 0); run_ladder(f, R, n, 1); break;
+    case FLT_DIGITAL: if (!mono) run_digital(f, L, n, 0); run_digital(f, R, n, 1); break;
+    case FLT_DIODE: if (!mono) run_diode(f, L, n, 0); run_diode(f, R, n, 1); break;
+    case FLT_FORMANT: if (!mono) run_formant(f, L, n, 0); run_formant(f, R, n, 1); break;
+    case FLT_COMB: if (!mono) run_comb(f, L, n, 0); run_comb(f, R, n, 1); break;
+    default: if (!mono) run_phaser(f, L, n, 0); run_phaser(f, R, n, 1); break;
+    }
+    if (mono) {
+        ns = NSTATE[f->model];
+        b = f->model == FLT_FORMANT ? 0 : 1;
+        for (i = 0; i < ns; i++)
+            f->s[b + i] = f->s[b + ns + i];
     }
 }
 
@@ -1040,5 +1064,6 @@ float filt_response(int model, int style, const filt_ctl_t *c, float note)
         break;
     }
     }
-    return cxabs(r);
+    hz = cxabs(r);
+    return hz < 16.0f ? hz : 16.0f;      /* (a self-oscillating setting has no linear response: a tall peak) */
 }

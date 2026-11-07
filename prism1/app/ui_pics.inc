@@ -66,7 +66,7 @@ static void pic_osc(int k)
     /* the names: table, warp, morph, frame */
     cv_text(4, 23, &FONT_T, pt.v[P_OSC(k, TABLE)] < (uint16_t)WT_NFACT ? WT_NAME[pt.v[P_OSC(k, TABLE)]] : "?", on ? WHITE : G2);
     num_text((int32_t)(fp + 1.5f), s);
-    text_cat(s, " / 32", sizeof s);
+    text_cat(s, " / 24", sizeof s);
     rtext(236, 23, &FONT_T, s, G3);
     if (warp)
         cv_text(4, 131, &FONT_T, WARP_NAME[warp % WARP_N], TEAL);

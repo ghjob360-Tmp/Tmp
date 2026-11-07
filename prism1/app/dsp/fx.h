@@ -48,9 +48,9 @@ float fx_sync_beats(float p);                           /* 0..1 -> beats (0 = fr
 
 /* the arenas (int16 samples), reserved by the core */
 #define FXA_CHORUS 4096u
-#define FXA_DELAY 65536u                 /* stereo: 2 x 32768: 0.74 s each at full rate, or 1.5 s at half rate */
+#define FXA_DELAY 32768u                 /* stereo: 2 x 16384: 0.37 s each at full rate, or 0.74 s at half rate */
 #define FXA_FLANGER 2048u
-#define FXA_REVERB 32768u
+#define FXA_REVERB 16384u
 
 typedef struct {
     float a[16];                         /* for the screen, effect-defined */

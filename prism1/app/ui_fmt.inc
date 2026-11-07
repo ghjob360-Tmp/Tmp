@@ -27,7 +27,7 @@ enum { C_NONE = -1, C_MSRC = -10, C_MDST, C_MAMT, C_MPOW, C_MBIP, C_MBYP, C_DPT 
        C_FXON = -30, C_FXPOS, C_MACRO = -40 };
 
 #define OS (P_O2_ON - P_O1_ON)
-#define FS (P_F2_ON - P_F1_ON)
+#define FSTR (P_F2_ON - P_F1_ON)
 #define ES (P_E2_DELAY - P_E1_DELAY)
 #define LST (P_L2_SHAPE - P_L1_SHAPE)
 #define RS (P_R2_STYLE - P_R1_STYLE)
@@ -107,7 +107,7 @@ static int ctl_at(int pg, int r, int i)
     if (pg == PG_SMP) return ROW_SMP[r][i];
     if (pg_flt(pg)) {
         id = ROW_FLT[r][i];
-        return id == P_F_ROUTE || id < 0 ? id : id + (pg - PG_F1) * FS;
+        return id == P_F_ROUTE || id < 0 ? id : id + (pg - PG_F1) * FSTR;
     }
     if (pg_env(pg)) {
         id = ROW_ENV[r][i];
@@ -248,6 +248,11 @@ static const fxf_t FXF[FXT_N][FX_NP] = {
     /* REVERB */ {FP, {FF_SEC, 0, 0, 0, 0}, {FF_NOTE, 0, 0, 0, 0}, {FF_NOTE, 0, 0, 0, 0}, {FF_NOTE, 0, 0, 0, 0},
                   {FF_DB, 0, -6, 0, 0}, FP, {FF_HZ, 0, 0, 0, 0}, {FF_MS, 0, 0, 300, 0}, FP, FP, FP}};
 
+static int sel_of(uint16_t v, int n)     /* a 0..1023 knob as one of n */
+{
+    int i = (int)((uint32_t)v * (uint32_t)n / 1024u);
+    return i >= n ? n - 1 : i;
+}
 static int fx_choice_n(int t, int i)     /* > 0: the parameter is a choice of that many */
 {
     const fxf_t *f = &FXF[t][i];
@@ -256,11 +261,6 @@ static int fx_choice_n(int t, int i)     /* > 0: the parameter is a choice of th
     if (f->kind == FF_STYLE)
         return FLT_NSTYLE[sel_of(pt.v[P_FX(t) + 1], FLT_N)];
     return 0;
-}
-static int sel_of(uint16_t v, int n)     /* a 0..1023 knob as one of n */
-{
-    int i = (int)((uint32_t)v * (uint32_t)n / 1024u);
-    return i >= n ? n - 1 : i;
 }
 static void fx_text(int t, int i, uint16_t raw, float v, char *s)
 {
@@ -336,7 +336,7 @@ static void param_text(int id, uint16_t raw, char *t)
             copy_text(t, raw ? "SERIAL" : "PARALLEL", 12);
             return;
         }
-        f = P_F1_ON + (id - P_F1_ON) % FS;
+        f = P_F1_ON + (id - P_F1_ON) % FSTR;
         switch (f) {
         case P_F1_ON: copy_text(t, ONOFF[raw & 1u], 12); return;
         case P_F1_MODEL: copy_text(t, FLT_NAME[raw % FLT_N], 12); return;
@@ -425,7 +425,7 @@ static void param_long(int id, char *t)
     } else if (id <= P_S_DEST) {
         copy_text(t, "SAMPLE", 20);
     } else if (id < P_F_ROUTE) {
-        copy_text(t, (id - P_F1_ON) / FS ? "FILTER 2" : "FILTER 1", 20);
+        copy_text(t, (id - P_F1_ON) / FSTR ? "FILTER 2" : "FILTER 1", 20);
     } else if (id >= P_E1_DELAY && id <= P_E6_RPOW) {
         copy_text(t, PG_NAME[PG_E1 + (id - P_E1_DELAY) / ES], 20);
     } else if (id >= P_L1_SHAPE && id <= P_L8_AMP) {

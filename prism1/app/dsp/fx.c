@@ -52,16 +52,35 @@ static const float SYNC_BEATS[FX_NSYNC] = {0.0f, 4.0f, 2.0f, 4.0f / 3.0f, 1.5f, 
                                            1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f};
 
 /* =============================================================== helpers === */
+/* FXF: a RAM function kept out of line. fastmath's functions are always inline, one copy per call site; RAM is the
+ * limit, so the RAM code calls these single copies (x_*) instead. The main-loop code (fx_init, fx_eq_response) keeps
+ * the inline ones: flash code may not call RAM code directly. */
+#define FXF static RAMC NOIN
+#if defined(__clang__)
+#define NOUNROLL _Pragma("clang loop unroll(disable)")
+#elif defined(__GNUC__)
+#define NOUNROLL _Pragma("GCC unroll 1")
+#else
+#define NOUNROLL
+#endif
+FXF float x_exp2(float x) { return fm_exp2f(x); }
+FXF float x_tan(float x) { return fm_tanf(x); }
+FXF float x_sin_turns(float x) { return fm_sin_turns(x); }
+FXF float x_log2(float x) { return fm_log2f(x); }
+FXF float x_tanh(float x) { return fm_tanhf(x); }
+FXF float x_sqrt(float x) { return fm_sqrtf(x); }
+FXF float x_note_hz(float n) { return 440.0f * x_exp2((n - 69.0f) * (1.0f / 12.0f)); }
+FXF float x_db_gain(float db) { return x_exp2(db * 0.16609640474f); }
 INL float clamp01(float x) { return x > 0.0f ? (x < 1.0f ? x : 1.0f) : 0.0f; }   /* NaN -> 0 */
 INL int pidx(float p, int n) { return (int)(clamp01(p) * (float)(n - 1) + 0.5f); }
 INL float sync_beats(float p) { return SYNC_BEATS[pidx(p, FX_NSYNC)]; }
 /* an LFO rate: 0.01..10 Hz (exp), or one cycle per synced division */
-INL float lfo_rate(float prate, float psync, float tempo)
+FXF float lfo_rate(float prate, float psync, float tempo)
 {
     float b = sync_beats(psync);
     if (b > 0.0f)
         return fm_maxf(tempo, 1.0f) * (1.0f / 60.0f) / b;
-    return 0.01f * fm_exp2f(clamp01(prate) * 9.965784f);
+    return 0.01f * x_exp2(clamp01(prate) * 9.965784f);
 }
 INL float rd16f(int16_t v) { return (float)v * (1.0f / 16384.0f); }
 INL int16_t f16(float x)
@@ -74,6 +93,33 @@ INL int16_t f16(float x)
     if (!(x == x))
         return 0;
     return (int16_t)(int32_t)x;
+}
+/* the same for a recirculating line: above 3 LSB (-75 dBFS) the rounding error is kept and added to the next store
+ * (first-order error feedback: no bias, so the line decays at its set rate); below, truncation toward zero (a
+ * slight extra loss down there, so the tail dies away to silence instead of idling at a few LSB) */
+INL int16_t f16e(float x, float *e)
+{
+    float v = x * 16384.0f, r;
+    if (v < 3.0f && v > -3.0f) {
+        *e = 0.0f;
+        return (int16_t)(int32_t)v;
+    }
+    v += *e;
+    if (v >= 32767.0f) {
+        *e = 0.0f;
+        return 32767;
+    }
+    if (v <= -32767.0f) {
+        *e = 0.0f;
+        return -32767;
+    }
+    if (!(v == v)) {
+        *e = 0.0f;
+        return 0;
+    }
+    r = fm_floorf(v + 0.5f);
+    *e = v - r;
+    return (int16_t)(int32_t)r;
 }
 /* read a power-of-two int16 line at d samples (>= 2) behind w, linear */
 INL float rdline(const int16_t *b, uint32_t w, float d, uint32_t mask)
@@ -115,13 +161,13 @@ INL float op_tick(float *s, float x, float g)
     *s = y + d;
     return y;
 }
-INL float op_coef(float hz, float sr)
+FXF float op_coef(float hz, float sr)
 {
     float w = FM_PI * clampf(hz, 1.0f, sr * 0.4535147f) / sr;
-    return fm_tanf(w / (w + 1.0f));
+    return x_tan(w / (w + 1.0f));
 }
 /* Vital's equalPowerFade (wet) / its inverse (dry) */
-INL void eqpow(float m, float *dry, float *wet)
+FXF void eqpow(float m, float *dry, float *wet)
 {
     m = clamp01(m);
     if (m <= 0.0f) {
@@ -134,27 +180,42 @@ INL void eqpow(float m, float *dry, float *wet)
         *wet = 1.0f;
         return;
     }
-    *wet = fm_sin_pi(m * (0.5f * FM_PI));
-    *dry = fm_sin_pi((1.0f - m) * (0.5f * FM_PI));
+    *wet = x_sin_turns(m * 0.25f);
+    *dry = x_sin_turns((1.0f - m) * 0.25f);
 }
 /* one-pole smoothing factor for a block of n samples, time constant tau seconds */
-INL float blk_alpha(uint32_t n, float tau)
+FXF float blk_alpha(uint32_t n, float tau)
 {
-    return 1.0f - fm_exp2f(-(float)n * (FM_LOG2E * ISR) / tau);
+    return 1.0f - x_exp2(-(float)n * (FM_LOG2E * ISR) / tau);
 }
 INL float peak_decay(float lv, float x) { x = fm_fabsf(x); return x > lv ? x : lv * 0.9995f; }
-INL void zero_bytes(void *p, uint32_t n)
+FXF void zero_bytes(void *p, uint32_t n)
 {
-    volatile unsigned char *c = (volatile unsigned char *)p;
+    unsigned char *c = (unsigned char *)p;   /* (-fno-builtin: no memset made of it) */
     while (n--)
         *c++ = 0;
 }
+/* a delay time's glide speed (samples per sample): toward vt, at most vmax; it gains speed by at most acc per block
+ * (so a jump starts a glide without a kink), and loses it at once */
+INL float glide(float *vel, float vt, float vmax, float acc)
+{
+    float v = *vel;
+    vt = clampf(vt, -vmax, vmax);
+    if (vt * v < 0.0f)
+        v = clampf(vt, -acc, acc);
+    else if (fm_fabsf(vt) > fm_fabsf(v))
+        v += clampf(vt - v, -acc, acc);
+    else
+        v = vt;
+    *vel = v;
+    return v;
+}
 /* Vital's Delay filter (MultiDelay / StereoDelay): low pass at cutoff + spread, high pass at cutoff - spread */
-INL void dly_filter(float cut, float spread, float sr, float *lc, float *hc, float *fg)
+FXF void dly_filter(float cut, float spread, float sr, float *lc, float *hc, float *fg)
 {
     float rad = clamp01(spread) * 96.0f, lf, hf;
-    lf = clampf(note_hz(cut + rad), 1.0f, sr * 0.4535147f);
-    hf = clampf(note_hz(cut - rad), 1.0f, sr * 0.4535147f);
+    lf = clampf(x_note_hz(cut + rad), 1.0f, sr * 0.4535147f);
+    hf = clampf(x_note_hz(cut - rad), 1.0f, sr * 0.4535147f);
     *lc = op_coef(lf, sr);
     *hc = op_coef(hf, sr);
     *fg = hf / lf + 1.0f;
@@ -169,10 +230,15 @@ typedef struct {
     float note, k, m0, m1, m2;            /* smoothed design values */
     float ic1[2], ic2[2];
 } svf_t;
-INL float svf_g(float note)
+INL float svf_g(float note)                 /* main loop */
 {
     float hz = clampf(note_hz(note), 1.0f, 0.499f * SR);
     return fm_tanf(FM_PI * hz * ISR);
+}
+FXF float svf_g_r(float note)              /* RAM */
+{
+    float hz = clampf(x_note_hz(note), 1.0f, 0.499f * SR);
+    return x_tan(FM_PI * hz * ISR);
 }
 INL float svf_tick(float *ic1, float *ic2, const svfc_t *c, float x)
 {
@@ -191,7 +257,7 @@ INL void svf_step(svf_t *f)
     f->c.m2 += f->d.m2;
 }
 /* this block's design (note, k, mix m0..m2): smooth (a), then ramp the coefficients over the n samples */
-INL void svf_block(svf_t *f, float note, float k, float m0, float m1, float m2, float a, int fresh, float inv)
+FXF void svf_block(svf_t *f, float note, float k, float m0, float m1, float m2, float a, int fresh, float inv)
 {
     float g, a1;
     svfc_t t;
@@ -204,7 +270,7 @@ INL void svf_block(svf_t *f, float note, float k, float m0, float m1, float m2, 
         f->m1 += (m1 - f->m1) * a;
         f->m2 += (m2 - f->m2) * a;
     }
-    g = svf_g(f->note);
+    g = svf_g_r(f->note);
     a1 = 1.0f / (1.0f + g * (g + f->k));
     t.a1 = a1, t.a2 = g * a1, t.a3 = g * g * a1, t.m0 = f->m0, t.m1 = f->m1, t.m2 = f->m2;
     if (fresh) {
@@ -225,15 +291,15 @@ INL void svf_flush(svf_t *f)
     f->ic2[0] = fm_flush(f->ic2[0]), f->ic2[1] = fm_flush(f->ic2[1]);
 }
 /* Vital's resonance: q from 0.5 to 16 on a cubic; the SVF's k = 1 / q */
-INL float svf_k(float res)
+FXF float svf_k(float res)
 {
     res = clamp01(res);
     return 1.0f / (0.5f + 15.5f * res * res * res);
 }
 /* the 12 dB style's pass blend (DigitalSvf::setupFilter): b -1 low pass .. 0 band pass .. 1 high pass */
-INL void svf_blend(float b, float k, float *m0, float *m1, float *m2)
+FXF void svf_blend(float b, float k, float *m0, float *m1, float *m2)
 {
-    float band = fm_sqrtf(fm_maxf(1.0f - b * b, 0.0f)), lo = b < 0.0f ? -b : 0.0f, hi = b > 0.0f ? b : 0.0f;
+    float band = x_sqrt(fm_maxf(1.0f - b * b, 0.0f)), lo = b < 0.0f ? -b : 0.0f, hi = b > 0.0f ? b : 0.0f;
     *m0 = hi;
     *m1 = band - k * hi;
     *m2 = lo - hi;
@@ -261,7 +327,7 @@ static struct {
     int fresh;
 } CH;
 
-static RAMC void run_chorus(const float *p, float tempo, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_chorus(const float *p, float tempo, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, a = blk_alpha(n, 0.02f), d1, d2, avg, rate, fb, lc, hc, fg, dry, wet;
     float dt[4][2][2], dpg[4], dfb, dlc, dhc, dfg, ddry, dwet, norm;
@@ -269,8 +335,8 @@ static RAMC void run_chorus(const float *p, float tempo, float *L, float *R, uin
     uint32_t s;
 
     rate = lfo_rate(p[1], p[2], tempo);
-    d1 = fm_exp2f(-10.0f + 4.35614f * clamp01(p[4]));
-    d2 = fm_exp2f(-10.0f + 4.35614f * clamp01(p[5]));
+    d1 = x_exp2(-10.0f + 4.35614f * clamp01(p[4]));
+    d2 = x_exp2(-10.0f + 4.35614f * clamp01(p[5]));
     fb = (2.0f * clamp01(p[6]) - 1.0f) * 0.95f;
     dly_filter(8.0f + 128.0f * clamp01(p[7]), p[8], SR, &lc, &hc, &fg);
     eqpow(p[9], &dry, &wet);
@@ -285,6 +351,7 @@ static RAMC void run_chorus(const float *p, float tempo, float *L, float *R, uin
     CH.phase = frac1(CH.phase + rate * (float)n * ISR);
     avg = 0.5f * (CH.d1 + CH.d2);
     np = 0;
+    NOUNROLL
     for (i = 0; i < 4; i++) {
         float po = (float)i * 0.25f / (float)nv, t = nv > 1 ? (float)i / (float)(nv - 1) : 0.0f;
         float tg = i < nv ? 1.0f : 0.0f;
@@ -294,11 +361,11 @@ static RAMC void run_chorus(const float *p, float tempo, float *L, float *R, uin
             float base = lerpf(v ? CH.d2 : CH.d1, avg, t);
             for (c = 0; c < 2; c++) {
                 float ph = CH.phase + po + 0.25f * (float)c + 0.5f * (float)v;
-                float mod = fm_sin_turns(ph) * 0.5f + 1.0f;
+                float mod = x_sin_turns(ph) * 0.5f + 1.0f;
                 float ds = clampf((mod * CH.depth * CH_DEPTH + base) * SR, 2.0f, (float)CH_LEN - 4.0f);
                 if (CH.fresh || CH.pg[i] <= 0.0f)
                     CH.tap[i][v][c] = ds;
-                dt[i][v][c] = (ds - CH.tap[i][v][c]) * inv;
+                dt[i][v][c] = clampf((ds - CH.tap[i][v][c]) * inv, -0.6f, 0.6f);
             }
         }
         if (CH.fresh)
@@ -319,6 +386,7 @@ static RAMC void run_chorus(const float *p, float tempo, float *L, float *R, uin
         float x[2], sum[2] = {0.0f, 0.0f}, fl = (float)CH.filled;
         x[0] = L[s], x[1] = R[s];
         CH.fb += dfb, CH.lc += dlc, CH.hc += dhc, CH.fg += dfg, CH.dry += ddry, CH.wet += dwet;
+        NOUNROLL
         for (i = 0; i < np; i++) {
             float g = (CH.pg[i] += dpg[i]);
             for (v = 0; v < 2; v++)
@@ -328,6 +396,7 @@ static RAMC void run_chorus(const float *p, float tempo, float *L, float *R, uin
                         sum[c] += g * rdline(ar_ch + c * CH_LEN, CH.w, d, CH_MASK);
                 }
         }
+        NOUNROLL
         for (c = 0; c < 2; c++) {
             float wv = clampf(x[c] + CH.fb * sum[c] * norm, -8.0f, 8.0f), lp;
             lp = op_tick(&CH.lp[c], wv * CH.fg, CH.lc);
@@ -392,11 +461,11 @@ INL void xover(float *st, int x, float in, float *lo, float *hi)
     *hi = in - 2.8284271f * v1 - u2;
 }
 
-static RAMC void run_comp(const float *p, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_comp(const float *p, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, att[3], rel[3], ut[3], lt[3], lut[3], llt[3], ur[3], lr[3], mk[3], dmk[3];
-    float amount = clamp01(p[6]), mix = clamp01(p[7]), dmix, ea = fm_expf(clamp01(p[1]) * 8.0f - 4.0f);
-    float er = fm_expf(clamp01(p[2]) * 8.0f - 4.0f), sumi[3] = {0, 0, 0}, sumo[3] = {0, 0, 0};
+    float amount = clamp01(p[6]), mix = clamp01(p[7]), dmix, ea = x_exp2((clamp01(p[1]) * 8.0f - 4.0f) * FM_LOG2E);
+    float er = x_exp2((clamp01(p[2]) * 8.0f - 4.0f) * FM_LOG2E), sumi[3] = {0, 0, 0}, sumo[3] = {0, 0, 0};
     int bands = pidx(p[0], 4), b, c;
     unsigned m;
     uint32_t s;
@@ -406,25 +475,26 @@ static RAMC void run_comp(const float *p, float *L, float *R, uint32_t n)
         zero_bytes(CP.xb, sizeof CP.xb);
         for (b = 0; b < 3; b++)
             for (c = 0; c < 2; c++) {
-                CP.he[b][c] = db_gain(CP_UT[b]) * db_gain(CP_UT[b]);
-                CP.le[b][c] = db_gain(CP_LT[b]) * db_gain(CP_LT[b]);   /* (Vital: 0, a 30 dB burst) */
+                CP.he[b][c] = x_exp2(CP_UT[b] * 0.33219281f);
+                CP.le[b][c] = x_exp2(CP_LT[b] * 0.33219281f);   /* (Vital: 0, a 30 dB burst) */
                 CP.g[b][c] = 1.0f, CP.gd[b][c] = 0.0f;
             }
         CP.bands = bands;
         CP.sub = 0;
     }
     m = CP_MASK[bands];
+    NOUNROLL
     for (b = 0; b < 3; b++) {
         float as = fm_maxf(ea * CP_ATT[b] * (SR * 0.001f), 5.0f), rs = fm_maxf(er * CP_REL[b] * (SR * 0.001f), 5.0f);
         att[b] = 1.0f / (as + 1.0f);
         rel[b] = 1.0f / (rs + 1.0f);
-        ut[b] = db_gain(CP_UT[b]), ut[b] *= ut[b];
-        lt[b] = db_gain(CP_LT[b]), lt[b] *= lt[b];
         lut[b] = CP_UT[b] * 0.33219281f;   /* log2 of the mean-square thresholds */
         llt[b] = CP_LT[b] * 0.33219281f;
+        ut[b] = x_exp2(lut[b]);
+        lt[b] = x_exp2(llt[b]);
         ur[b] = CP_UR[b] * 0.5f * amount;
         lr[b] = CP_LR[b] * 0.5f * amount;
-        mk[b] = db_gain(clamp01(p[3 + b]) * 60.0f - 30.0f);
+        mk[b] = x_db_gain(clamp01(p[3 + b]) * 60.0f - 30.0f);
         if (CP.fresh)
             CP.mk[b] = mk[b];
         dmk[b] = (mk[b] - CP.mk[b]) * inv;
@@ -440,39 +510,30 @@ static RAMC void run_comp(const float *p, float *L, float *R, uint32_t n)
         CP.mix += dmix;
         for (b = 0; b < 3; b++)
             CP.mk[b] += dmk[b];
+        NOUNROLL
         for (c = 0; c < 2; c++) {
-            bs[0][c] = bs[1][c] = bs[2][c] = 0.0f;
-            switch (bands) {
-            case 0: {
-                float rest;
-                xover(CP.xa[c], 0, x[c], &bs[0][c], &rest);
-                xover(CP.xb[c], 1, rest, &bs[1][c], &bs[2][c]);
-                break;
-            }
-            case 1:
-                xover(CP.xa[c], 0, x[c], &bs[0][c], &bs[1][c]);
-                break;
-            case 2:
-                xover(CP.xb[c], 1, x[c], &bs[1][c], &bs[2][c]);
-                break;
-            default:
-                bs[1][c] = x[c];
-                break;
-            }
+            float lo = 0.0f, mid = x[c], hi = 0.0f;
+            if (m & 1u)                        /* low band: split at 120 Hz */
+                xover(CP.xa[c], 0, mid, &lo, &mid);
+            if (m & 4u)                        /* high band: split (the rest) at 2.5 kHz */
+                xover(CP.xb[c], 1, mid, &mid, &hi);
+            bs[0][c] = lo, bs[1][c] = mid, bs[2][c] = hi;
         }
         if (CP.sub == 0) {                     /* the gains for the next CP_SUB samples */
+            NOUNROLL
             for (b = 0; b < 3; b++) {
                 if (!(m & (1u << b)))
                     continue;
                 for (c = 0; c < 2; c++) {
-                    float e = ur[b] * (lut[b] - fm_log2f(CP.he[b][c])) + lr[b] * (llt[b] - fm_log2f(CP.le[b][c]));
-                    float gt = fm_exp2f(e > 5.0f ? 5.0f : e);    /* Vital: at most 32 */
+                    float e = ur[b] * (lut[b] - x_log2(CP.he[b][c])) + lr[b] * (llt[b] - x_log2(CP.le[b][c]));
+                    float gt = x_exp2(e > 5.0f ? 5.0f : e);    /* Vital: at most 32 */
                     CP.gd[b][c] = (gt - CP.g[b][c]) * (1.0f / (float)CP_SUB);
                 }
             }
         }
         CP.sub = (CP.sub + 1u) & (CP_SUB - 1u);
         y[0] = y[1] = 0.0f;
+        NOUNROLL
         for (b = 0; b < 3; b++) {
             if (!(m & (1u << b)))
                 continue;
@@ -492,6 +553,7 @@ static RAMC void run_comp(const float *p, float *L, float *R, uint32_t n)
         L[s] = y[0], R[s] = y[1];
     }
     CP.mix = mix;
+    NOUNROLL
     for (b = 0; b < 3; b++) {
         float k = fm_minf((float)n * (1.0f / (0.025f * SR)), 1.0f);
         CP.mk[b] = mk[b];
@@ -503,11 +565,12 @@ static RAMC void run_comp(const float *p, float *L, float *R, uint32_t n)
     for (c = 0; c < 2; c++)
         for (b = 0; b < 4; b++)
             CP.xa[c][b] = fm_flush(CP.xa[c][b]), CP.xb[c][b] = fm_flush(CP.xb[c][b]);
+    NOUNROLL
     for (b = 0; b < 3; b++) {
         int on = (m >> b) & 1u;
-        VIEW[FXT_COMP].a[b] = on ? fm_maxf(3.0103f * fm_log2f(CP.msi[b] + 1e-10f), -100.0f) : -100.0f;
-        VIEW[FXT_COMP].a[3 + b] = on ? fm_maxf(3.0103f * fm_log2f(CP.mso[b] + 1e-10f), -100.0f) : -100.0f;
-        VIEW[FXT_COMP].a[6 + b] = on ? 3.0103f * fm_log2f(CP.g[b][0] * CP.g[b][1] + 1e-20f) : 0.0f;
+        VIEW[FXT_COMP].a[b] = on ? fm_maxf(3.0103f * x_log2(CP.msi[b] + 1e-10f), -100.0f) : -100.0f;
+        VIEW[FXT_COMP].a[3 + b] = on ? fm_maxf(3.0103f * x_log2(CP.mso[b] + 1e-10f), -100.0f) : -100.0f;
+        VIEW[FXT_COMP].a[6 + b] = on ? 3.0103f * x_log2(CP.g[b][0] * CP.g[b][1] + 1e-20f) : 0.0f;
         VIEW[FXT_COMP].a[9 + b] = CP_UT[b];
         VIEW[FXT_COMP].a[12 + b] = CP_LT[b];
     }
@@ -518,13 +581,13 @@ static RAMC void run_comp(const float *p, float *L, float *R, uint32_t n)
 /* Vital's StereoDelay: mono (both sides at time 1), stereo (right at time 2), ping pong (the mono input enters the
  * right side, the sides swap each pass), mid ping pong (stereo input, swapping, left time = time 1 + time 2); the
  * feedback through Vital's saturator (+-8; the int16 line holds +-2) and its low / high pass at cutoff +- spread x
- * 8 octaves; Vital's 20 ms half-life glide on time changes. The line is 32768 samples a side: up to 0.74 s at the
- * full rate; longer times switch the whole delay to half rate (to 1.49 s; longer is clamped): the wet fades out over
+ * 8 octaves; Vital's 20 ms half-life glide on time changes. The line is 16384 samples a side: up to 0.37 s at the
+ * full rate; longer times switch the whole delay to half rate (to 0.74 s; longer is clamped): the wet fades out over
  * a block, the rate changes, the line restarts empty. */
-#define DL_LEN 32768u
+#define DL_LEN 16384u
 #define DL_MASK (DL_LEN - 1u)
 static struct {
-    float freq[2], per[2];
+    float freq[2], per[2], vel[2];
     float fb, lc, hc, fg, dry, wet, gate;
     float lp[2], hp[2];
     float acc[2], y1[2];
@@ -533,7 +596,7 @@ static struct {
     int half, ph, fresh;
 } DL;
 
-INL void dl_tick(float in0, float in1, int style, float pl, float pr, float fbl, float fbr, float *r0, float *r1)
+FXF void dl_tick(float in0, float in1, int style, float pl, float pr, float fbl, float fbr, float *r0, float *r1)
 {
     float fl = (float)DL.filled, a = 0.0f, b = 0.0f, w0, w1, lp;
     if (pl + 2.0f < fl)
@@ -569,7 +632,7 @@ INL void dl_tick(float in0, float in1, int style, float pl, float pr, float fbl,
     *r1 = b;
 }
 
-static RAMC void run_delay(const float *p, float tempo, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_delay(const float *p, float tempo, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, t[2], sr, decay, need, pt[2], dper[2], fb, lc, hc, fg, dry, wet, gt;
     float dfb, dlc, dhc, dfg, ddry, dwet, dgate;
@@ -583,7 +646,7 @@ static RAMC void run_delay(const float *p, float tempo, float *L, float *R, uint
     }
     if (style == 0)
         t[1] = t[0];
-    decay = fm_exp2f(-(float)n * (1.0f / (0.02f * SR)));
+    decay = x_exp2(-(float)n * (1.0f / (0.02f * SR)));
     for (c = 0; c < 2; c++) {
         float f = 1.0f / t[c];
         DL.freq[c] = DL.fresh ? f : f + (DL.freq[c] - f) * decay;
@@ -592,12 +655,13 @@ static RAMC void run_delay(const float *p, float tempo, float *L, float *R, uint
     if (style == 3)
         pt[0] += pt[1];
     need = fm_maxf(pt[0], pt[1]);
-    want = DL.half ? need > 30000.0f : need > 32700.0f;
+    want = DL.half ? need > 15000.0f : need > 16300.0f;
     gt = 1.0f;
     if (want != DL.half) {
         if (DL.fresh || DL.gate <= 0.0f) {   /* faded out: change the rate, restart the line */
             DL.per[0] *= want ? 0.5f : 2.0f;
             DL.per[1] *= want ? 0.5f : 2.0f;
+            DL.vel[0] = DL.vel[1] = 0.0f;
             DL.half = want;
             DL.filled = 0;
             DL.ph = 0;
@@ -611,7 +675,11 @@ static RAMC void run_delay(const float *p, float tempo, float *L, float *R, uint
         if (DL.fresh)
             DL.per[c] = pt[c];
         pt[c] = lerpf(DL.per[c], pt[c], 0.5f);
-        dper[c] = (pt[c] - DL.per[c]) * inv;
+        /* the glide's speed: at most +-0.5 in read rate, gained over ~6 ms (Vital's is unlimited: a big jump races
+         * through the line, a burst of noise; here it is a tape-like slide) */
+        dper[c] = glide(&DL.vel[c], (pt[c] - DL.per[c]) * inv, DL.half ? 0.25f : 0.5f,
+                        (DL.half ? 0.0009f : 0.0018f) * (float)n);
+        pt[c] = DL.per[c] + dper[c] * (float)n;
     }
     fb = 2.0f * clamp01(p[5]) - 1.0f;
     dly_filter(8.0f + 128.0f * clamp01(p[6]), p[7], sr, &lc, &hc, &fg);
@@ -669,7 +737,7 @@ static struct {
 } DS;
 
 /* the drive's meaning for a type: gain, crush step, or downsample period (samples) */
-INL float ds_drive(int type, float d)
+FXF float ds_drive(int type, float d)
 {
     if (type == 4)
         return fm_maxf(d * d, 1.49e-8f);
@@ -677,19 +745,19 @@ INL float ds_drive(int type, float d)
         float u = 1.0f - d;
         return fm_maxf(0.495f / fm_maxf(u * u, 1.49e-8f), 1.0f);
     }
-    return db_gain(d * 60.0f - 30.0f);
+    return x_db_gain(d * 60.0f - 30.0f);
 }
-INL float ds_shape(int type, float x, float dv, int c, int tick)
+FXF float ds_shape(int type, float x, float dv, int c, int tick)
 {
     switch (type) {
     case 0:
-        return fm_tanhf(x * dv);
+        return x_tanh(x * dv);
     case 1:
         return clampf(x * dv, -1.0f, 1.0f);
     case 2:
         return fm_fabsf(frac1(x * dv * 0.25f + 0.75f) * -4.0f + 2.0f) - 1.0f;
     case 3:
-        return fm_sin_turns(frac1(x * dv * -0.25f + 0.5f));
+        return x_sin_turns(frac1(x * dv * -0.25f + 0.5f));
     case 4:
         return fm_floorf(x / dv + 0.5f) * dv;
     default:
@@ -699,7 +767,7 @@ INL float ds_shape(int type, float x, float dv, int c, int tick)
     }
 }
 
-static RAMC void run_dist(const float *p, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_dist(const float *p, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, d = clamp01(p[1]), mix = clamp01(p[6]), k = svf_k(p[4]), m0, m1, m2;
     float dv, ddv, dvo = 0.0f, ddvo = 0.0f, dmix, xf = 1.0f, dxf = 0.0f;
@@ -739,6 +807,7 @@ static RAMC void run_dist(const float *p, float *L, float *R, uint32_t n)
                     DS.cnt = 0.0f;
             }
         }
+        NOUNROLL
         for (c = 0; c < 2; c++) {
             float v = x[c], o;
             if (order == 1)
@@ -771,13 +840,15 @@ static struct {
     int fresh;
 } EQ;
 
-/* band i's design from the parameters: note, k, m0..m2 */
-INL void eq_design(const float *p, int i, float *note, float *k, float *m0, float *m1, float *m2)
+/* band i's design from the parameters: note, k, m0..m2 (A, sA: the gain's amplitude and its root, from the
+ * caller's maths: inline in the main loop, x_* in RAM) */
+INL float eq_db(const float *p, int i) { return clamp01(p[4 * i + 2]) * 36.0f - 18.0f; }
+INL void eq_design(const float *p, int i, float A, float sA, float *note, float *k, float *m0, float *m1, float *m2)
 {
     int mode = pidx(p[4 * i], 2);
-    float db = clamp01(p[4 * i + 2]) * 36.0f - 18.0f, A = db_gain(db), sA = fm_sqrtf(A);
+    float db = eq_db(p, i), r = clamp01(p[4 * i + 3]);
     *note = 8.0f + 128.0f * clamp01(p[4 * i + 1]);
-    *k = svf_k(p[4 * i + 3]);
+    *k = 1.0f / (0.5f + 15.5f * r * r * r);
     if (i == 0) {
         if (mode)
             *m0 = 1.0f, *m1 = -*k, *m2 = -1.0f;                          /* high pass */
@@ -800,20 +871,22 @@ INL void eq_design(const float *p, int i, float *note, float *k, float *m0, floa
     }
 }
 
-static RAMC void run_eq(const float *p, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_eq(const float *p, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, a = blk_alpha(n, 0.004f);
     int i;
     uint32_t s;
+    NOUNROLL
     for (i = 0; i < 3; i++) {
-        float note, k, m0, m1, m2;
-        eq_design(p, i, &note, &k, &m0, &m1, &m2);
+        float note, k, m0, m1, m2, A = x_db_gain(eq_db(p, i));
+        eq_design(p, i, A, x_sqrt(A), &note, &k, &m0, &m1, &m2);
         svf_block(&EQ.b[i], note, k, m0, m1, m2, a, EQ.fresh, inv);
     }
     EQ.fresh = 0;
     for (s = 0; s < n; s++) {
         float l = L[s], r = R[s];
         EQ.xin = peak_decay(EQ.xin, l + r);
+        NOUNROLL
         for (i = 0; i < 3; i++) {
             svf_t *f = &EQ.b[i];
             svf_step(f);
@@ -839,7 +912,7 @@ static struct {
     int model, style, fresh;
 } FT;
 
-static RAMC void run_filter(const float *p, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_filter(const float *p, float *L, float *R, uint32_t n)
 {
     float dl[CTL], dr[CTL], inv = 1.0f / (float)n, mix = clamp01(p[8]), dmix;
     int model = pidx(p[0], FLT_N), style = pidx(p[1], FLT_NSTYLE[model]);
@@ -889,14 +962,14 @@ static RAMC void run_filter(const float *p, float *L, float *R, uint32_t n)
 #define FL_MASK (FL_LEN - 1u)
 #define FL_MAXD ((float)(FL_LEN - 4u) * ISR)
 static struct {
-    float phase, note, depth, d[2], fb, dry, wet;
+    float phase, note, depth, d[2], vel[2], fb, dry, wet;
     uint32_t w, filled;
     int fresh;
 } FL;
 
 INL float tri01(float ph) { return fm_fabsf(2.0f * frac1(ph + 0.75f) - 1.0f); }   /* Vital's triangleWave */
 
-static RAMC void run_flanger(const float *p, float tempo, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_flanger(const float *p, float tempo, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, a = blk_alpha(n, 0.02f), rate = lfo_rate(p[0], p[1], tempo), off = clamp01(p[5]);
     float fb = 2.0f * clamp01(p[2]) - 1.0f, dry, wet, dd[2], dfb, ddry, dwet, center, depth;
@@ -912,10 +985,11 @@ static RAMC void run_flanger(const float *p, float tempo, float *L, float *R, ui
         FL.depth += (clamp01(p[4]) - FL.depth) * a;
     }
     FL.phase = frac1(FL.phase + rate * (float)n * ISR);
-    center = fm_minf(1.0f / note_hz(FL.note), FL_MAXD);
+    center = fm_minf(1.0f / x_note_hz(FL.note), FL_MAXD);
     depth = FL.depth;
     if (center > 0.0005f)
         depth = fm_minf(depth, (FL_MAXD - 0.0005f) / (center - 0.0005f) - 1.0f);
+    NOUNROLL
     for (c = 0; c < 2; c++) {
         float ph = FL.phase - 0.5f * off + (c ? off : 0.0f);
         float mod = depth * (tri01(ph) * 2.0f - 1.0f) + 1.0f;
@@ -923,7 +997,7 @@ static RAMC void run_flanger(const float *p, float tempo, float *L, float *R, ui
         d = clampf(fm_maxf(d, 1.0f / 20000.0f) * SR, 2.0f, (float)FL_LEN - 4.0f);
         if (FL.fresh)
             FL.d[c] = d;
-        dd[c] = (d - FL.d[c]) * inv;
+        dd[c] = glide(&FL.vel[c], (d - FL.d[c]) * inv, 0.6f, 0.002f * (float)n);   /* as the delay's */
     }
     FL.fresh = 0;
     dfb = (fb - FL.fb) * inv, ddry = (dry - FL.dry) * inv, dwet = (wet - FL.wet) * inv;
@@ -931,6 +1005,7 @@ static RAMC void run_flanger(const float *p, float tempo, float *L, float *R, ui
         float x[2], fl = (float)FL.filled;
         x[0] = L[s], x[1] = R[s];
         FL.fb += dfb, FL.dry += ddry, FL.wet += dwet;
+        NOUNROLL
         for (c = 0; c < 2; c++) {
             float d = (FL.d[c] += dd[c]), r = 0.0f;
             if (d + 2.0f < fl)
@@ -955,28 +1030,34 @@ static RAMC void run_flanger(const float *p, float tempo, float *L, float *R, ui
  * the feedback band-limited (20x above and below the cutoff) and tanh-saturated, out = (in + allpass) / 2, a linear
  * mix. The cutoff coefficient is worked out per block and ramped (Vital: per sample). */
 static struct {
-    float phase, g[2], gl[2], gh[2], res, pk[3], mix;
+    float phase, center, g[2], gl[2], gh[2], res, pk[3], mix;
     float st[2][12], lo[2], hi[2], ap[2];
     float cut[2];
     int fresh;
 } PH;
 
-static RAMC void run_phaser(const float *p, float tempo, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_phaser(const float *p, float tempo, float *L, float *R, uint32_t n)
 {
     float inv = 1.0f / (float)n, rate = lfo_rate(p[0], p[1], tempo), res = clamp01(p[2]);
     float center = 8.0f + 128.0f * clamp01(p[3]), depth = 48.0f * clamp01(p[4]), bl = 2.0f * clamp01(p[5]);
     float off = clamp01(p[6]), mix = clamp01(p[7]), pk[3], dg[2], dgl[2], dgh[2], dres, dpk[3], dmix;
     int c, i;
     uint32_t s;
+    if (PH.fresh)                          /* the center glides (20 ms): a jump sweeps 12 stages, a chirp */
+        PH.center = center;
+    else
+        PH.center += (center - PH.center) * blk_alpha(n, 0.02f);
+    center = PH.center;
     pk[0] = clamp01(1.0f - bl);
     pk[2] = clamp01(bl - 1.0f);
     pk[1] = 1.0f - pk[0] - pk[2];
     PH.phase = frac1(PH.phase + rate * (float)n * ISR);
+    NOUNROLL
     for (c = 0; c < 2; c++) {
         float ph = frac1(PH.phase + (c ? -0.5f : 0.5f) * off), m = 1.0f - fm_fabsf(2.0f * ph - 1.0f);
-        float note = center + (2.0f * m - 1.0f) * depth, hz = fm_minf(note_hz(note), SR), w, g;
+        float note = center + (2.0f * m - 1.0f) * depth, hz = fm_minf(x_note_hz(note), SR), w, g;
         w = FM_PI * hz * ISR;
-        g = fm_tanf(w / (w + 1.0f));
+        g = x_tan(w / (w + 1.0f));
         PH.cut[c] = note;
         if (PH.fresh)
             PH.g[c] = g, PH.gl[c] = fm_minf(g * 20.0f, 0.9f), PH.gh[c] = g * (1.0f / 20.0f);
@@ -998,12 +1079,13 @@ static RAMC void run_phaser(const float *p, float tempo, float *L, float *R, uin
         x[0] = L[s], x[1] = R[s];
         PH.res += dres, PH.mix += dmix;
         PH.pk[0] += dpk[0], PH.pk[1] += dpk[1], PH.pk[2] += dpk[2];
+        NOUNROLL
         for (c = 0; c < 2; c++) {
             float g = (PH.g[c] += dg[c]), *st = PH.st[c], lows, highs, in, y, o1, o3;
             PH.gl[c] += dgl[c], PH.gh[c] += dgh[c];
             lows = op_tick(&PH.lo[c], PH.ap[c], PH.gl[c]);
             highs = op_tick(&PH.hi[c], lows, PH.gh[c]);
-            in = (PH.res * 0.5f + 1.0f) * x[c] + fm_tanhf(PH.res * (lows - highs));
+            in = (PH.res * 0.5f + 1.0f) * x[c] + x_tanh(PH.res * (lows - highs));
             for (i = 0; i < 4; i++)
                 y = op_tick(&st[i], in, g), in -= 2.0f * y;
             o1 = in;
@@ -1038,8 +1120,8 @@ static RAMC void run_phaser(const float *p, float tempo, float *L, float *R, uin
  * The size spans Vital's 2^-3 .. 2^-0.51 of its line lengths (Vital: 2^-3 .. 2^1): the arena's limit. */
 #define RV_N 8
 #define RV_SR (0.5f * SR)
-#define RV_MMAX 0.70f                      /* the largest size: Vital's line lengths x this */
-#define RV_PD 6624u                        /* pre-delay line: 300 ms at half rate */
+#define RV_MMAX 0.30f                      /* the largest size: Vital's line lengths x this */
+#define RV_PD 3000u                        /* pre-delay line: 136 ms at half rate */
 static const float RV_D[RV_N] = {3376.6f, 4639.2f, 3852.25f, 5664.25f, 2260.77f, 3259.485f, 2632.78f, 2815.125f};
 static const uint16_t RV_AP[RV_N] = {500, 399, 466, 438, 447, 403, 453, 426};
 static struct {
@@ -1049,7 +1131,7 @@ static struct {
 } RL;
 static struct {
     uint32_t w[RV_N], apw[RV_N], pdw, filled;
-    float off[RV_N], dec[RV_N], shs[RV_N];
+    float off[RV_N], dec[RV_N], shs[RV_N], el[RV_N], ea[RV_N];
     float m, pds, pdel, phase, drift;
     float hamp, hc, lpc, hpc, lps, hps;
     float dry, wet;
@@ -1057,35 +1139,36 @@ static struct {
     int ph, fresh;
 } RV;
 
-INL void rv_targets(float m, float drift, float phase, float *off)
+FXF void rv_targets(float m, float drift, float phase, float *off)
 {
     int j;
+    NOUNROLL
     for (j = 0; j < 4; j++) {
         float ph = phase + (float)j * (1.0f / 16.0f);
-        off[j] = RV_D[j] * m + drift * fm_sin_turns(ph + 0.25f);
-        off[4 + j] = RV_D[4 + j] * m + drift * fm_sin_turns(ph);
+        off[j] = RV_D[j] * m + drift * x_sin_turns(ph + 0.25f);
+        off[4 + j] = RV_D[4 + j] * m + drift * x_sin_turns(ph);
     }
     for (j = 0; j < RV_N; j++)
         off[j] = clampf(off[j], 2.0f, (float)RL.len[j] - 3.0f);
 }
 
-static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
+static RAMC NOIN void run_reverb(const float *p, float *L, float *R, uint32_t n)
 {
     float a = blk_alpha(n, 0.05f), m, decay, dsec, hamp, hc, lpc, hpc, dry, wet, pd, off[RV_N], dec[RV_N];
     float doff[RV_N], ddec[RV_N], dhamp, dhc, dlpc, dhpc, dpd, ddry, dwet, invt, rate, amt;
     uint32_t s, nt = (n + (uint32_t)RV.ph) >> 1;
     int k;
 
-    m = fm_exp2f(-3.0f + clamp01(p[0]) * (3.0f - 0.5145732f));       /* 0.125 .. 0.70 */
-    dsec = 0.1f * fm_exp2f(clamp01(p[1]) * 9.321928f);                /* 0.1 .. 64 s */
-    lpc = op_coef(note_hz(128.0f * clamp01(p[2])), RV_SR);
-    hpc = op_coef(note_hz(128.0f * clamp01(p[3])), RV_SR);
-    hc = op_coef(note_hz(128.0f * clamp01(p[4])), RV_SR);
-    hamp = db_gain(clamp01(p[5]) * 6.0f - 6.0f);
+    m = x_exp2(-3.0f + clamp01(p[0]) * (3.0f - 0.5145732f));       /* 0.125 .. 0.70 */
+    dsec = 0.1f * x_exp2(clamp01(p[1]) * 9.321928f);                /* 0.1 .. 64 s */
+    lpc = op_coef(x_note_hz(128.0f * clamp01(p[2])), RV_SR);
+    hpc = op_coef(x_note_hz(128.0f * clamp01(p[3])), RV_SR);
+    hc = op_coef(x_note_hz(128.0f * clamp01(p[4])), RV_SR);
+    hamp = x_db_gain(clamp01(p[5]) * 6.0f - 6.0f);
     amt = clamp01(p[6]);
     amt *= amt;
-    rate = fm_exp2f(clamp01(p[7]) * 11.0f - 8.0f);
-    pd = fm_maxf(clamp01(p[8]) * 0.3f * RV_SR, 1.0f);
+    rate = x_exp2(clamp01(p[7]) * 11.0f - 8.0f);
+    pd = clampf(clamp01(p[8]) * 0.3f * RV_SR, 1.0f, (float)RV_PD - 4.0f);
     eqpow(p[9], &dry, &wet);
     if (RV.fresh) {
         RV.m = m, RV.pds = RV.pdel = pd;
@@ -1097,8 +1180,9 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
     RV.phase = frac1(RV.phase + rate * (float)n * ISR);
     rv_targets(RV.m, RV.drift, RV.phase, off);
     decay = -9.965784f / (dsec * RV_SR);                             /* log2(0.001) per tick of loop */
+    NOUNROLL
     for (k = 0; k < RV_N; k++)
-        dec[k] = fm_exp2f(decay * (RV_D[k] * RV.m + (float)RV_AP[k]));
+        dec[k] = x_exp2(decay * (RV_D[k] * RV.m + (float)RV_AP[k]));
     if (RV.fresh) {
         for (k = 0; k < RV_N; k++)
             RV.off[k] = off[k], RV.dec[k] = dec[k];
@@ -1106,11 +1190,14 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
     }
     RV.fresh = 0;
     invt = nt ? 1.0f / (float)nt : 0.0f;
-    for (k = 0; k < RV_N; k++)
-        doff[k] = (off[k] - RV.off[k]) * invt, ddec[k] = (dec[k] - RV.dec[k]) * invt;
+    for (k = 0; k < RV_N; k++) {
+        doff[k] = clampf((off[k] - RV.off[k]) * invt, -0.3f, 0.3f);   /* size / chorus glides: read rate +-0.3 */
+        off[k] = RV.off[k] + doff[k] * (float)nt;
+        ddec[k] = (dec[k] - RV.dec[k]) * invt;
+    }
     dhamp = (hamp - RV.hamp) * invt, dhc = (hc - RV.hc) * invt;
     dlpc = (lpc - RV.lpc) * invt, dhpc = (hpc - RV.hpc) * invt;
-    dpd = (RV.pds - RV.pdel) * invt;
+    dpd = clampf((RV.pds - RV.pdel) * invt, -0.5f, 0.5f);
     ddry = (dry - RV.dry) * (1.0f / (float)n), dwet = (wet - RV.wet) * (1.0f / (float)n);
 
     for (s = 0; s < n; s++) {
@@ -1133,6 +1220,7 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
             RV.lpc += dlpc, RV.hpc += dhpc, RV.hc += dhc, RV.hamp += dhamp;
             in = (op_tick(&RV.hps, in, RV.hpc) - op_tick(&RV.lps, in, RV.lpc)) * 0.25f;
             /* the lines, through their allpasses */
+            NOUNROLL
             for (k = 0; k < RV_N; k++) {
                 float d = (RV.off[k] += doff[k]), av = 0.0f, v;
                 RV.dec[k] += ddec[k];
@@ -1140,7 +1228,7 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
                 if (fl >= (float)RV_AP[k])
                     av = rd16f(RL.ap[k][RV.apw[k]]);
                 v = r[k] - 0.6f * av;
-                RL.ap[k][RV.apw[k]] = f16(in + v);
+                RL.ap[k][RV.apw[k]] = f16e(in + v, &RV.ea[k]);
                 if (++RV.apw[k] >= RV_AP[k])
                     RV.apw[k] = 0;
                 o[k] = av + 0.6f * v;
@@ -1154,11 +1242,12 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
                 w[4 + j] = (u - v) * 0.70710678f;
             }
             /* the high shelf, the decay, the store */
+            NOUNROLL
             for (k = 0; k < RV_N; k++) {
                 float hf = op_tick(&RV.shs[k], w[k], RV.hc);
                 w[k] = hf + RV.hamp * (w[k] - hf);
                 st[k] = RV.dec[k] * w[k];
-                RL.line[k][RV.w[k]] = f16(st[k]);
+                RL.line[k][RV.w[k]] = f16e(st[k], &RV.el[k]);
                 if (++RV.w[k] >= RL.len[k])
                     RV.w[k] = 0;
             }
@@ -1169,8 +1258,8 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
                 float u = st[j] - s0, v = st[4 + j] - s1;
                 t[j] = w[j] + w[4 + j] + 0.125f * 0.70710678f * (RV.dec[j] * (u + v) + RV.dec[4 + j] * (u - v));
             }
-            tot0 = (t[0] + t[2]) * 0.70710678f;
-            tot1 = (t[1] + t[3]) * 0.70710678f;
+            tot0 = (t[0] + t[2]) * 1.41421356f;     /* 4 lines a side x sqrt 2: Vital's 8 lines' power */
+            tot1 = (t[1] + t[3]) * 1.41421356f;
             o0 = 0.5f * (RV.y1[0] + tot0), o1 = 0.5f * (RV.y1[1] + tot1);
             RV.y1[0] = tot0, RV.y1[1] = tot1;
             if (RV.filled < 65535u)
@@ -1184,7 +1273,6 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
     }
     for (k = 0; k < RV_N; k++)
         RV.off[k] = off[k], RV.dec[k] = dec[k], RV.shs[k] = fm_flush(RV.shs[k]);
-    RV.pdel = RV.pds;
     RV.hamp = hamp, RV.hc = hc, RV.lpc = lpc, RV.hpc = hpc, RV.dry = dry, RV.wet = wet;
     RV.lps = fm_flush(RV.lps), RV.hps = fm_flush(RV.hps);
     RV.bz[0] = fm_flush(RV.bz[0]), RV.bz[1] = fm_flush(RV.bz[1]);
@@ -1197,8 +1285,18 @@ static RAMC void run_reverb(const float *p, float *L, float *R, uint32_t n)
 }
 
 /* ============================================================= the entries === */
+/* every continuous parameter passes a one-pole (FX_TAU) at the block rate before the effect ramps it per sample:
+ * a jump in a mix, a gain, a feedback or a cutoff takes a few ms, not one block. The selectors (DISC) are not
+ * smoothed. */
+#define FX_TAU 0.008f
+static const uint16_t DISC[FXT_N] = {0x005u, 0x001u, 0x015u, 0x005u, 0x111u, 0x003u, 0x002u, 0x002u, 0x000u};
+static float PS[FXT_N][FX_NP];
+static uint8_t PSF[FXT_N];
+
 RAMC void fx_reset(int type)
 {
+    if (type >= 0 && type < FXT_N)
+        PSF[type] = 1;
     switch (type) {
     case FXT_CHORUS:
         zero_bytes(&CH, sizeof CH);
@@ -1244,8 +1342,23 @@ RAMC void fx_reset(int type)
 
 RAMC void fx_run(int type, const float *p, float tempo, float *L, float *R, uint32_t n)
 {
-    if (n == 0u)
+    float q[FX_NP], *ps, a;
+    int k, np;
+    if (n == 0u || type < 0 || type >= FXT_N)
         return;
+    ps = PS[type];
+    np = FXT_NP[type];
+    a = blk_alpha(n, FX_TAU);
+    for (k = 0; k < FX_NP; k++) {
+        float x = k < np ? clamp01(p[k]) : 0.0f;
+        if (PSF[type] || ((DISC[type] >> k) & 1u))
+            ps[k] = x;
+        else
+            ps[k] += (x - ps[k]) * a;
+        q[k] = ps[k];
+    }
+    PSF[type] = 0;
+    p = q;
     switch (type) {
     case FXT_CHORUS:
         run_chorus(p, tempo, L, R, n);
@@ -1325,8 +1438,8 @@ float fx_eq_response(const float *p, float note)
     float hz = clampf(note_hz(note), 1.0f, 0.499f * SR), wt = fm_tanf(FM_PI * hz * ISR), mag2 = 1.0f;
     int i;
     for (i = 0; i < 3; i++) {
-        float nt, k, m0, m1, m2, W, re, im, dr, di;
-        eq_design(p, i, &nt, &k, &m0, &m1, &m2);
+        float nt, k, m0, m1, m2, W, re, im, dr, di, A = db_gain(eq_db(p, i));
+        eq_design(p, i, A, fm_sqrtf(A), &nt, &k, &m0, &m1, &m2);
         W = wt / svf_g(nt);
         dr = 1.0f - W * W, di = k * W;
         re = m0 * dr + m2, im = m0 * di + m1 * W;

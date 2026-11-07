@@ -40,7 +40,7 @@ extern const char *const FLT_NAME[FLT_N];
 extern const int FLT_NSTYLE[FLT_N];
 extern const char *const FLT_STYLE_NAME[FLT_N][FLT_MAXSTYLE];   /* short: <= 10 characters */
 
-#define COMB_LEN 1024u
+#define COMB_LEN 512u
 typedef struct {
     float cutoff;                        /* MIDI note (keytrack applied by the core), Vital: 8 .. 136 */
     float reso;                          /* 0..1 */
