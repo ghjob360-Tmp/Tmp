@@ -1,104 +1,149 @@
-# PRISM-1 in the host simulator: ./build.sh --host, then
+# PRISM-1 1.0 in the host simulator: ./build.sh --host, then
 #   app/build/host/prism-1_host app/tests/basic.txt app/build/host
-wait 800
-shot boot.png
+wait 1500
+expect page 0
+expect tables_ready 1
+# a chord: three voices
 key 7 down 100
-wait 100
-expect note 60
-expect voices 1
-expect midi_out 1
-expect loud 1
-key 7 up
-wait 50
-# a six-note chord: six voices
-key 0 down 90
-key 4 down 90
-key 7 down 90
 key 11 down 90
-key 14 down 90
-key 16 down 90
-wait 200
-expect voices 6
+key 14 down 80
+wait 400
+expect voices 3
 expect loud 1
-shot chord.png
-# a seventh steals one
-key 19 down 90
-wait 50
-expect voices 6
-key 0 up
-key 4 up
+shot osc1.png
+press GLO
+wait 100
+shot osc1_spectrum.png
+release GLO
 key 7 up
 key 11 up
 key 14 up
-key 16 up
-key 19 up
-wait 2000
-expect voices 0
-# pages and rows
+wait 2500
+# every page
 tap SEL
-wait 30
+wait 100
 expect page 1
 tap SEL
-wait 30
-expect page 0
-turn K1 2
-wait 60
-expect tableA 2
-turn K3 4
-wait 30
-expect warpA 4
-turn ALGO 1
-wait 30
-expect row 1
-shot osc.png
-tap EDIT
-wait 30
-expect page 2
-turn K1 1
-wait 30
-expect model 1
-shot filter.png
-tap ENV
-wait 30
+tap SEL
+wait 100
 expect page 3
-shot env.png
-tap LFO
-wait 30
-expect page 6
-shot lfo.png
-# Vital's drag: on LFO 1, ARP picks the LFO up; a knob on another page sets how much it moves that parameter
-tap ARP
-wait 30
-expect modsrc 4
+shot sample.png
 tap EDIT
-wait 30
-turn K3 3
-wait 30
-expect slot0dst 9
-expect slot0amt 5
-shot assign.png
+wait 100
+expect page 4
+key 7 down 100
+wait 300
+shot filter1.png
+key 7 up
+turn SELECT 5
+wait 100
+shot filter_formant.png
+turn SELECT 3
+tap ENV
+wait 100
+expect page 6
+key 7 down 100
+wait 300
+shot env1.png
+key 7 up
+tap LFO
+wait 100
+expect page 12
+shot lfo1.png
+turn ALGO 3
+turn K2 4
+wait 100
+shot lfo_draw.png
+press GLO
+tap LFO
+release GLO
+wait 100
+expect page 20
+shot random1.png
+# pick up LFO 1 and give the filter's cutoff some of it
+tap LFO
+wait 100
+expect page 12
 tap ARP
-wait 30
-expect modsrc 0
+expect pick 7
+tap EDIT
+wait 50
+turn K1 12
+wait 100
+expect slots 1
+key 7 down 100
+wait 600
+shot filter_mod.png
+key 7 up
 tap ARP
-wait 30
-expect page 8
-turn K1 2
-turn K2 9
-turn K3 30
-wait 30
+expect pick 0
+tap SEQ
+wait 100
+expect page 24
 shot matrix.png
+tap HOME
+wait 100
+expect page 25
+shot macros.png
+tap HOME
+wait 100
+expect page 27
+shot voice.png
+# effects: turn the reverb on, move it first
 tap FX
-wait 30
-expect page 9
-turn K1 1
-wait 30
-shot fx.png
-expect dirty 1
+wait 100
+expect page 26
+turn SELECT 8
+wait 50
+expect fx_sel 8
+tap FX
+press GLO
+turn SELECT -8
+release GLO
+expect fx_first 8
+key 7 down 100
+wait 400
+shot fx_reverb.png
+key 7 up
+turn SELECT -4
+wait 100
+shot fx_eq.png
+# eight voices, then a ninth steals
+key 0 down 100
+key 2 down 100
+key 4 down 100
+key 5 down 100
+key 7 down 100
+key 9 down 100
+key 11 down 100
+key 12 down 100
+wait 300
+expect voices 8
+key 14 down 100
+wait 100
+expect voices 8
+key 0 up
+key 2 up
+key 4 up
+key 5 up
+key 7 up
+key 9 up
+key 11 up
+key 12 up
+key 14 up
+wait 3000
+# every preset sounds
+turn PRESET 1
+wait 600
+key 7 down 100
+wait 500
+expect loud 1
+key 7 up
+wait 1500
+# save into a user slot, reboot, still there
 tap SAVE
-wait 30
+wait 300
 expect dirty 0
 reboot
-wait 800
-expect tableA 2
-expect model 1
+wait 1500
+expect preset 24

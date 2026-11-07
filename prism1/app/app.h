@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* PRISM-1: a reduced Vital-style wavetable synth for the M-VAVE FM-1. The app's half of the contract with fm1-base. */
+/* PRISM-1 1.0: a Vital-style wavetable synth for the M-VAVE FM-1. The app's half of the contract with fm1-base. */
 #pragma once
 #include <stdint.h>
 #include "plat.h"
@@ -11,8 +11,8 @@
 #define APP_OVERLOAD                     /* the render over 90 % of its time: shed a voice */
 void app_overload(void);
 
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u}
+enum { OBJ_SETTINGS, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u}
 
 void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);
