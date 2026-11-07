@@ -32,6 +32,8 @@ static uint16_t vdst[NSLOT], gdst[NSLOT];   /* their distinct destinations */
 static int nvd, ngd;
 static uint32_t src_used;                /* the sources the matrix reads (bit per MS_*) */
 static uint8_t o_on[NOSC], s_on, flt_on[2];
+static uint8_t v_mono;                   /* the voices are mono (no spread, centred, nothing moves the pan): the filters
+                                            run one channel, half the cost */
 static int fx_was_on[FXT_N];
 static float gmv[NSLOT];                 /* the global modulation (effects, volume): a value per destination ... */
 static uint8_t gix[NPARAM];              /* ... found by the parameter (index + 1; 0 none) */
@@ -360,6 +362,27 @@ static RAMC void take_input(void)
         s_on = (uint8_t)(pc(P_S_ON) != 0);
         flt_on[0] = (uint8_t)(pc(P_F1_ON) != 0);
         flt_on[1] = (uint8_t)(pc(P_F2_ON) != 0);
+        {                                /* mono voices? */
+            int mono = 1, was = v_mono;
+            for (k = 0; k < NOSC; k++)
+                if (o_on[k] && ((pc(P_OSC(k, UNI)) > 0 && PT.v[P_OSC(k, STEREO)] > 0u) || PT.v[P_OSC(k, PAN)] != 512u))
+                    mono = 0;
+            if (s_on && PT.v[P_S_PAN] != 512u)
+                mono = 0;
+            for (i = 0; i < nvs; i++) {
+                int d = vsl[i].dst;
+                if (d == P_S_PAN || ((d >= P_O1_ON && d <= P_O3_DEST) &&
+                                     (d - P_O1_ON) % (P_O2_ON - P_O1_ON) == P_O1_PAN - P_O1_ON) ||
+                    ((d >= P_O1_ON && d <= P_O3_DEST) && (d - P_O1_ON) % (P_O2_ON - P_O1_ON) == P_O1_STEREO - P_O1_ON))
+                    mono = 0;
+            }
+            v_mono = (uint8_t)mono;
+            if (mono != was)             /* (a comb's other line was left as it was: start clean) */
+                for (i = 0; i < NVOICE; i++) {
+                    filt_reset(&VF[i][0], pc(P_F1_MODEL), pc(P_F1_STYLE));
+                    filt_reset(&VF[i][1], pc(P_F2_MODEL), pc(P_F2_STYLE));
+                }
+        }
         for (k = 0; k < 2; k++) {        /* a filter's model or style changed: reset it in every voice */
             int md = pc(P_FLT(k, MODEL)), st = pc(P_FLT(k, STYLE));
             for (i = 0; i < NVOICE; i++)
@@ -445,6 +468,21 @@ static RAMC void zero(float *d, uint32_t n)
     uint32_t j;
     for (j = 0; j < n; j++)
         d[j] = 0.0f;
+}
+
+/* a filter with its dry / wet mix (tmp: n floats of scratch) */
+static RAMC void filt_run_mix(filt_t *f, float *L, float *R, float *tmp, uint32_t n, float mix)
+{
+    uint32_t j;
+    if (mix >= 0.999f) {
+        filt_run(f, L, R, n);
+        return;
+    }
+    for (j = 0; j < n; j++)
+        tmp[j] = L[j];
+    filt_run(f, L, R, n);
+    for (j = 0; j < n; j++)
+        L[j] = tmp[j] + (L[j] - tmp[j]) * mix;
 }
 
 static RAMC void voice_mods(voice_t *v, float *vm, float dt)
@@ -595,7 +633,11 @@ static RAMC void voice_block(int vi, uint32_t n, int core)   /* core: whose scra
             fc.fy = pv(vm, P_F1_FY);
             fc.transpose = (pv(vm, P_F1_TRANS) - 0.5f) * 24.0f;
             filt_ctl(&VF[vi][0], &fc, n);
-            if (mix >= 0.999f) {
+            if (v_mono) {                /* one channel, then copied */
+                filt_run_mix(&VF[vi][0], i1l, i1l, b[B_BOL], n, mix);
+                for (j = 0; j < n; j++)
+                    i1r[j] = i1l[j];
+            } else if (mix >= 0.999f) {
                 filt_run(&VF[vi][0], i1l, i1r, n);
             } else {
                 float *tl = b[B_BOL], *tr = b[B_BOR];
@@ -628,7 +670,11 @@ static RAMC void voice_block(int vi, uint32_t n, int core)   /* core: whose scra
             fc.fy = pv(vm, P_F2_FY);
             fc.transpose = (pv(vm, P_F2_TRANS) - 0.5f) * 24.0f;
             filt_ctl(&VF[vi][1], &fc, n);
-            if (mix >= 0.999f) {
+            if (v_mono) {                /* one channel, then copied */
+                filt_run_mix(&VF[vi][1], i2l, i2l, b[B_BOL], n, mix);
+                for (j = 0; j < n; j++)
+                    i2r[j] = i2l[j];
+            } else if (mix >= 0.999f) {
                 filt_run(&VF[vi][1], i2l, i2r, n);
             } else {
                 float *tl = b[B_BOL], *tr = b[B_BOR];

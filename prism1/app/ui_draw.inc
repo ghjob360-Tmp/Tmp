@@ -132,7 +132,7 @@ static void draw_bottom(void)
             switch (c) {
             case C_MSRC: lb = "SOURCE"; copy_text(t, MS_NAME[m->src % MS_N], sizeof t); v = (float)m->src / (MS_N - 1); break;
             case C_MDST: lb = "DEST";
-                if (m->dst < NPARAM) copy_text(t, param_name(m->dst), sizeof t); else copy_text(t, "-", sizeof t);
+                param_short(m->dst < NPARAM ? (int)m->dst : -1, t);
                 v = m->dst < NPARAM ? (float)m->dst / (float)(NPARAM - 1) : 0.0f;
                 break;
             case C_MAMT: lb = "AMOUNT"; v = (float)m->amt * 0.0005f + 0.5f; bip_text(v, t); text_cat(t, "%", sizeof t); bip = 1; break;

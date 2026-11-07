@@ -23,6 +23,7 @@ static struct {
     int top_dirty, bot_dirty;
     uint32_t top_at, bot_at;
     int mac_sel, hold;
+    uint32_t warn_at;
 } ui;
 
 void app_say(const char *a, const char *b)
@@ -397,7 +398,12 @@ static void input(void)
         ui.pick = 0;
         ui.bot_dirty = 1;
     }
-    if ((e = plat_enc(EN_PRESET)) != 0) {
+    if ((e = plat_enc(EN_PRESET)) != 0 && dirty && now - ui.warn_at > 2500u) {
+        ui.warn_at = now;                /* edits not saved: the first turn only warns */
+        app_say("NOT SAVED", "TURN AGAIN TO LEAVE");
+        e = 0;
+    }
+    if (e != 0) {
         int n = (cur_preset + NPRESET + (e > 0 ? 1 : -1)) % NPRESET;
         char t[24];
         if (n >= NFACT && !user_get(n - NFACT)) {   /* skip the empty user slots */

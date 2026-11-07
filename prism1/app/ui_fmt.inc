@@ -22,6 +22,7 @@ static int pg_source(int pg)
     return MS_NONE;
 }
 
+static const char *param_name(int id);
 /* the controls that are not parameters */
 enum { C_NONE = -1, C_MSRC = -10, C_MDST, C_MAMT, C_MPOW, C_MBIP, C_MBYP, C_DPT = -20, C_DY, C_DC, C_DCOPY,
        C_FXON = -30, C_FXPOS, C_MACRO = -40 };
@@ -444,6 +445,27 @@ static void param_long(int id, char *t)
     } else {
         text_cat(t, PDESC[id].name, 20);
     }
+}
+/* a parameter with its section, short: "F1 CUTOFF", "O2 FRAME" (the matrix's destination knob) */
+static void param_short(int id, char *t)
+{
+    static const char *const FA[FXT_N] = {"CHO", "CMP", "DLY", "DST", "EQ", "FLT", "FLG", "PHS", "REV"};
+    char n[4] = {0, 0, 0, 0};
+    t[0] = 0;
+    if (id < 0 || id >= NPARAM) {
+        copy_text(t, "-", 20);
+        return;
+    }
+    if (id <= P_O3_DEST) { n[0] = 'O'; n[1] = (char)('1' + (id - P_O1_ON) / OS); copy_text(t, n, 20); }
+    else if (id <= P_S_DEST) copy_text(t, "SMP", 20);
+    else if (id < P_F_ROUTE) { n[0] = 'F'; n[1] = (char)('1' + (id - P_F1_ON) / FSTR); copy_text(t, n, 20); }
+    else if (id >= P_E1_DELAY && id <= P_E6_RPOW) { n[0] = 'E'; n[1] = (char)('1' + (id - P_E1_DELAY) / ES); copy_text(t, n, 20); }
+    else if (id >= P_L1_SHAPE && id <= P_L8_AMP) { n[0] = 'L'; n[1] = (char)('1' + (id - P_L1_SHAPE) / LST); copy_text(t, n, 20); }
+    else if (id >= P_R1_STYLE && id <= P_R4_AMP) { n[0] = 'R'; n[1] = (char)('1' + (id - P_R1_STYLE) / RS); copy_text(t, n, 20); }
+    else if (id >= P_X_CHO_ON) copy_text(t, FA[(id - P_X_CHO_ON) / (P_X_CMP_ON - P_X_CHO_ON)], 20);
+    if (t[0])
+        text_cat(t, " ", 20);
+    text_cat(t, param_name(id), 20);
 }
 static const char *param_name(int id)
 {
