@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material 3; on Android 12+ the colours come from the wallpaper (App: DynamicColors) -->
+    <style name="Theme.FM1" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/seed_primary</item>
+        <item name="colorSecondary">@color/seed_secondary</item>
+        <item name="colorTertiary">@color/seed_tertiary</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">?attr/colorSurfaceContainer</item>
+    </style>
+    <style name="FM1.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardCornerRadius">20dp</item>
+        <item name="contentPadding">18dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
+    </style>
+    <style name="FM1.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>

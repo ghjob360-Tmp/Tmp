@@ -142,6 +142,33 @@ public class CoreTest {
         catch (Fm1Exception e) { e4 = e.getMessage(); }
         check(e4 != null && Arrays.equals(f4.flash, f4.orig), "D: a head that is not the stock version's: refused, nothing written");
 
+        /* ---- E: logue units packed as chain1/tools/logue/logue_pack.py packs them ---- */
+        if (a.length > 5) {
+            String dir = a[5];
+            for (String n : new String[] {"waves.ntkdigunit", "pluck.nts1mkiiunit", "dmod.nts1mkiiunit"}) {
+                LogueUnit u = LogueUnit.pack(Files.readAllBytes(Paths.get(dir, n)));
+                byte[] want = Files.readAllBytes(Paths.get(dir, n.replaceAll("\\.[a-z0-9]+$", ".lgu")));
+                check(Arrays.equals(u.image, want), "E: " + n + " packed byte for byte as logue_pack.py (" + u.describe() + ")");
+            }
+            boolean refused = false;
+            try { LogueUnit.pack(stock); } catch (Fm1Exception e) { refused = true; }
+            check(refused, "E: a firmware package is not taken for a unit");
+            /* ---- F: the unit bank's protocol against a CHAIN-1 stand-in ---- */
+            LogueUnit u = LogueUnit.pack(Files.readAllBytes(Paths.get(dir, "pluck.nts1mkiiunit")));
+            FakeChain fc = new FakeChain();
+            int[] pct = {0};
+            int slot = Units.put(fc, u.image, -1, (d2, t) -> pct[0] = d2 * 100 / t);
+            check(slot == 0 && Arrays.equals(fc.slots[0], u.image) && pct[0] == 100, "F: PUT: the FM-1 read the image whole into slot 1");
+            List<Units.Entry> l = Units.list(fc);
+            check(l.size() == 7 && l.get(0).used && l.get(0).module == 4 && l.get(0).name.equals("PLUCK") && !l.get(1).used,
+                  "F: LIST: slot 1 PLUCK (osc), the rest free");
+            Units.erase(fc, 0);
+            check(fc.slots[0] == null, "F: ERASE");
+            fc.full = true;
+            String msg = null;
+            try { Units.put(fc, u.image, -1, null); } catch (Fm1Exception e) { msg = e.getMessage(); }
+            check(msg != null && msg.contains("滿"), "F: a full bank: refused with why (" + msg + ")");
+        }
         System.out.println(fails == 0 ? "core tests passed" : fails + " failed");
         System.exit(fails == 0 ? 0 : 1);
     }
@@ -435,5 +462,85 @@ public class CoreTest {
         }
 
         public void resetRecovery() { }
+    }
+
+    /** CHAIN-1's app_usb_cmd as the FM-1 runs it: PUT reads the image 512 bytes at a time, then answers */
+    static final class FakeChain implements Midi.Link {
+        final java.util.ArrayDeque<byte[]> outQ = new java.util.ArrayDeque<>();
+        final byte[][] slots = new byte[7][];
+        byte[][] names = new byte[7][];
+        boolean full;
+        byte[] rx;
+        int rxSlot, rxLen, rxOff;
+
+        static byte[] request(long addr, int n) {
+            byte[] q = new byte[8];
+            for (int i = 0; i < 4; i++) q[1 + i] = (byte) (addr >>> (8 * i));
+            q[5] = (byte) n;
+            q[6] = (byte) (n >> 8);
+            return Wire.frame(0x30, q);
+        }
+
+        void next() {
+            if (rxOff < rxLen) {
+                outQ.add(request(rxOff, Math.min(512, rxLen - rxOff)));
+                return;
+            }
+            slots[rxSlot] = rx;
+            rx = null;
+            outQ.add(Wire.frame(Units.RESULT, new byte[] {0, (byte) rxSlot}));
+        }
+
+        public boolean send(byte[] m) {
+            long[] r = Wire.parseRequest(m);
+            byte[][] f = Wire.parseFrame(m);
+            if (f != null && (f[0][0] & 0xFF) == 0x30 && rx != null) {   /* a read's answer: fl addr len data */
+                byte[] b = f[1];
+                long addr = (b[1] & 0xFF) | (b[2] & 0xFF) << 8 | (b[3] & 0xFF) << 16 | (long) (b[4] & 0xFF) << 24;
+                int n = (b[5] & 0xFF) | (b[6] & 0xFF) << 8;
+                if (addr == rxOff) {
+                    System.arraycopy(b, 8, rx, rxOff, n);
+                    rxOff += n;
+                }
+                next();
+                return true;
+            }
+            if (f == null) return true;
+            int cmd = f[0][0] & 0xFF;
+            byte[] b = f[1];
+            if (cmd == Units.LIST) {
+                byte[] o = new byte[7 * 23];
+                for (int s = 0; s < 7; s++)
+                    if (slots[s] != null) {
+                        o[23 * s] = 1;
+                        o[23 * s + 1] = slots[s][4] == 2 ? (byte) 4 : slots[s][5];
+                        o[23 * s + 2] = slots[s][4];
+                        byte[] nm = "PLUCK".getBytes();
+                        System.arraycopy(nm, 0, o, 23 * s + 3, nm.length);
+                    }
+                outQ.add(Wire.frame(Units.LIST_R, o));
+            } else if (cmd == Units.ERASE) {
+                slots[b[0]] = null;
+                outQ.add(Wire.frame(Units.RESULT, new byte[] {0, b[0]}));
+            } else if (cmd == Units.PUT) {
+                int s = b[0] & 0xFF;
+                if (s == 0xFF) for (s = 0; s < 7 && slots[s] != null; s++) { }
+                if (full || s >= 7) {
+                    outQ.add(Wire.frame(Units.RESULT, new byte[] {3, 0}));
+                    return true;
+                }
+                rxSlot = s;
+                rxLen = (b[1] & 0xFF) | (b[2] & 0xFF) << 8 | (b[3] & 0xFF) << 16;
+                rx = new byte[rxLen];
+                rxOff = 0;
+                next();
+            }
+            return true;
+        }
+
+        public byte[] read(long ms) { return outQ.poll(); }
+        public void drain() { }
+        public boolean lost() { return false; }
+        public void close() { }
     }
 }

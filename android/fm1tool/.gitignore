@@ -1,2 +1,4 @@
 build/
-dist/fm1tool.apk
+.gradle/
+local.properties
+*.idsig

@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: MPL-2.0
+// FM-1 Tool: ./gradlew-less build with Gradle 8.7+ (gradle assembleRelease); sources stay where build.sh had them
+plugins {
+    id 'com.android.application' version '8.7.3'
+}
+
+android {
+    namespace 'fm1.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'fm1.app'
+        minSdk 26
+        targetSdk 34
+        versionCode 2
+        versionName '2.0'
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+        }
+    }
+    signingConfigs {
+        release {
+            storeFile file('fm1tool.keystore')
+            storePassword 'fm1tool'
+            keyAlias 'fm1tool'
+            keyPassword 'fm1tool'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+}

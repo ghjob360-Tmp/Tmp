@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FM-1 Tool</string>
+    <string name="tab_install">安裝</string>
+    <string name="tab_units">單元</string>
+    <string name="tab_rescue">救援</string>
+    <string name="install_title">安裝韌體</string>
+    <string name="install_body">FM-1 開機（或在更新模式），用 USB-C OTG 線接到手機。安裝中請不要拔線，螢幕會保持亮著。</string>
+    <string name="pick_fw">選擇韌體檔</string>
+    <string name="install_go">安裝到 FM-1</string>
+    <string name="no_file">還沒選檔案（.fwsc）</string>
+    <string name="stock_title">M-VAVE 原廠韌體</string>
+    <string name="stock_body">下載官方 V16（核對雜湊值）並用同樣的流程裝回去。</string>
+    <string name="stock_go">下載並安裝 V16</string>
+    <string name="units_title">logue 單元（CHAIN-1）</string>
+    <string name="units_body">把 NTS-1 / NTS-1 mkII 的 logue SDK 單元（.ntkdigunit、.nts1mkiiunit）裝進 CHAIN-1 的 7 個位置：振盪器、MOD、DELAY、REVERB。FM-1 要在跑 CHAIN-1 1.0 以上。</string>
+    <string name="pick_unit">選擇單元檔</string>
+    <string name="send_unit">傳送到 FM-1</string>
+    <string name="no_unit">還沒選單元</string>
+    <string name="slot">位置</string>
+    <string name="slot_auto">自動</string>
+    <string name="bank_title">FM-1 上的單元</string>
+    <string name="bank_read">讀取</string>
+    <string name="bank_empty">按「讀取」看 FM-1 上有哪些單元</string>
+    <string name="rescue_title">UBOOT 救援（還原原廠韌體）</string>
+    <string name="rescue_body">FM-1 開不了機、電腦看到「WL82 UBOOT 1.00」時用。會先把整顆快閃備份到「下載/FM-1」，確認開機區是原廠 V15 / V16，只改寫應用程式區，最後整顆讀回比對。</string>
+    <string name="rescue_check">只檢查並備份</string>
+    <string name="rescue_go">寫回原廠韌體</string>
+    <string name="status_idle">準備好了</string>
+    <string name="cancel">取消</string>
+    <string name="log">紀錄</string>
+</resources>
