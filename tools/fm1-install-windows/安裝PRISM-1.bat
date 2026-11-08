@@ -41,6 +41,6 @@ echo.
 echo 請先關掉 Chrome 的安裝頁和其他用 MIDI 的程式（DAW、M-VAVE 的 App）。
 echo FM-1 在「Felucca Update」更新模式或正常開機都可以；它會自動接續。
 echo.
-%PY% fm1_install.py prism-1-1.2.fwsc --classic
+%PY% fm1_install.py prism-1-1.3.fwsc --classic
 echo.
 pause
