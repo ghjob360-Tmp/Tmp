@@ -1,6 +1,7 @@
-# the NTS-1 style screens: the scope while a note sounds, the value large while a knob turns, then the scope again
+# the screens: the scope while notes sound, the value large while a knob turns, each section's own picture
 wait 800
 key 7 down 100
+key 11 down 100
 wait 700
 shot scope.png
 tap SEL
@@ -9,11 +10,18 @@ turn K1 -12
 wait 100
 shot value.png
 wait 1600
-shot scope2.png
-turn PRESET 2
-wait 100
-shot type.png
+shot filter_curve.png
+tap ENV
+wait 1600
+shot amp_env.png
+tap LFO
+wait 1600
+shot lfo_wave.png
 key 7 up
+key 11 up
+tap SEQ
+wait 1600
+shot voice_page.png
 tap FX
 wait 30
 turn PRESET 2

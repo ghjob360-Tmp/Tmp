@@ -1,285 +1,482 @@
-# every TYPE of every section played once, recorded: tools/check_wav.py checks the recording
+# every TYPE of every section played once, recorded: three notes each (poly where the voice allows)
 wait 600
+turn ALGO -9
+wait 30
 wav types.wav
+# OSC
 tap EDIT
 wait 30
-turn PRESET -4
+turn PRESET -20
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
-turn K1 60
-turn K2 60
-wait 30
-tap EDIT
-wait 30
-turn PRESET -4
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
-turn PRESET 1
+key 11 up
+wait 160
+turn PRESET -20
 wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
+# FILTER
 tap SEL
 wait 30
-turn PRESET -7
+turn PRESET -20
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
-turn PRESET -7
+key 11 up
+wait 160
+turn PRESET -20
 wait 30
+# AMP EG
 tap ENV
 wait 30
-turn PRESET -5
+turn PRESET -20
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
+key 11 up
+wait 160
 turn PRESET 1
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
-turn PRESET 1
+key 11 up
+wait 160
+turn PRESET -20
 wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET -5
-wait 30
-tap FX
-wait 30
-turn K2 60
-wait 30
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET -4
-tap FX
-wait 30
-turn K2 80
-turn K3 60
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET -5
-tap FX
-wait 30
-turn K3 60
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
-turn PRESET 1
-wait 30
-key 7 down
-wait 220
-expect loud 1
-key 7 up
-wait 120
+# FILTER EG
 tap SEL
 wait 30
-turn K2 200
-tap FX
+tap SEL
 wait 30
-turn PRESET 1
-turn K2 200
+turn PRESET -20
 wait 30
-key 7 down
-wait 220
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
 key 7 up
-wait 120
-wait 2000
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
 expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET -20
+wait 30
+# LFO
+tap LFO
+wait 30
+turn PRESET -20
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET -20
+wait 30
+# VOICE
+tap SEQ
+wait 30
+turn PRESET -20
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET -20
+wait 30
+# MOD
+tap FX
+wait 30
+turn PRESET -20
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET -20
+wait 30
+# DELAY
+tap FX
+wait 30
+tap FX
+wait 30
+turn PRESET -20
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET -20
+wait 30
+# REVERB
+tap FX
+wait 30
+tap FX
+wait 30
+tap FX
+wait 30
+turn PRESET -20
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET 1
+wait 30
+key 7 down 110
+key 11 down 90
+wait 260
+expect loud 1
+key 7 up
+key 11 up
+wait 160
+turn PRESET -20
+wait 30
 wavstop

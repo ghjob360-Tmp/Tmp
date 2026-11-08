@@ -1,0 +1,61 @@
+# logue SDK units (built from the SDK's own examples: tests/units/README.md) in the bank's slots, as the FM-1 Tool
+# app would send them, then in their places: two oscillators (mk1 and mkII) and a mkII modulation effect
+data app/tests/units/waves-mk1.lgu 0x97000
+data app/tests/units/pluck-mk2.lgu 0xA0000
+data app/tests/units/dummy-delfx-mk1.lgu 0xA9000
+reboot
+wait 600
+expect units 3
+tap PLAY
+wait 30
+shot units_list.png
+tap EDIT
+wait 30
+turn PRESET 5
+wait 100
+expect osc 5
+expect unit_osc 1
+key 7 down
+wait 300
+expect loud 1
+shot unit_osc.png
+key 7 up
+wait 300
+turn K3 10
+wait 30
+turn PRESET 1
+wait 100
+expect osc 6
+expect unit_osc 1
+key 7 down
+wait 300
+expect loud 1
+key 7 up
+wait 300
+turn PRESET -1
+wait 100
+expect osc 5
+# the delay unit in the DELAY place: the chain then runs on the second core, a block behind
+tap FX
+tap FX
+wait 30
+expect section 7
+turn PRESET 6
+wait 100
+expect dly 8
+expect unit_dly 1
+key 9 down
+wait 300
+expect loud 1
+key 9 up
+wait 200
+shot unit_dly.png
+# back to built-in: the place is the built-in delay's again
+turn PRESET -1
+wait 100
+expect dly 5
+expect unit_dly 0
+key 9 down
+wait 300
+expect loud 1
+key 9 up

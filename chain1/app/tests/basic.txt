@@ -2,55 +2,85 @@
 #   app/build/host/chain-1_host app/tests/basic.txt app/build/host
 wait 600
 shot boot.png
-# a key sounds and goes out over USB-MIDI
-key 7 down
-wait 80
-expect note 60
-expect midi_out 1
+expect factory 1
+expect vmode 0
+# poly: three keys, three voices; the note goes out over USB-MIDI
+key 7 down 100
+key 11 down 60
+key 14 down 127
+wait 120
+expect voices 3
+expect note 67
+expect midi_out 3
 expect loud 1
-shot key.png
+shot poly.png
 key 7 up
-wait 50
-expect note -1
-# sections and types
-tap SEL
-wait 30
-expect section 1
-turn PRESET 1
-wait 30
-expect flt 1
-turn K1 -10
-wait 30
-expect cutoff 620
-expect dirty 1
-shot filter.png
+key 11 up
+key 14 up
+wait 2500
+expect voices 0
+# the sections: EDIT OSC, SEL FILTER (again: FILTER EG), ENV AMP EG, LFO, SEQ VOICE, FX MOD / DELAY / REVERB,
+# ARP, PLAY the units
 tap EDIT
 wait 30
 expect section 0
 turn PRESET 3
 wait 30
 expect osc 3
-tap ENV
+tap SEL
 wait 30
-turn PRESET 2
+expect section 1
+turn PRESET -1
 wait 30
-expect eg 2
-# the effects: FX steps MOD -> DELAY -> REVERB
-tap FX
+expect flt 0
+turn K1 -10
+wait 30
+expect cutoff 390
+expect dirty 1
+shot filter.png
+tap SEL
 wait 30
 expect section 3
+shot filter_eg.png
+tap ENV
+wait 30
+expect section 2
 turn PRESET 1
 wait 30
-expect mod 1
-tap FX
+expect eg 1
+shot amp_eg.png
+tap LFO
 wait 30
 expect section 4
+shot lfo.png
+tap SEQ
+wait 30
+expect section 5
+turn PRESET 1
+wait 30
+expect vmode 1
+tap REC
+wait 30
+expect page 1
+shot voice.png
+tap FX
+wait 30
+expect section 6
+turn PRESET 1
+wait 30
+expect mod 3
+tap FX
+wait 30
+expect section 7
 turn PRESET 5
 wait 30
 expect dly 5
 tap FX
 wait 30
-expect section 5
+expect section 8
+turn PRESET -1
+wait 30
+expect rev 0
 turn PRESET 1
 wait 30
 expect rev 1
@@ -58,20 +88,26 @@ shot reverb.png
 key 12 down
 wait 300
 expect loud 1
+expect voices 1
 key 12 up
 wait 1500
 expect loud 1
-wav fx.wav
+# mono: a second key takes the one voice
 key 0 down
-wait 400
+key 4 down
+wait 100
+expect voices 1
+expect note 57
+key 4 up
+wait 50
+expect note 53
 key 0 up
 wait 1500
-wavstop
 # the arpeggiator: a press turns it on, a held key plays its chord
 tap ARP
 wait 30
 expect arp 1
-expect section 6
+expect section 9
 key 7 down
 wait 1200
 expect steps 10
@@ -81,15 +117,20 @@ wait 200
 tap ARP
 wait 30
 expect arp 0
-# a factory sound, then SAVE and a reboot keeps it
-turn ALGO 3
+tap PLAY
+wait 30
+expect section 10
+shot units.png
+# a factory sound, then SAVE (into the first user slot) and a reboot keeps it
+turn ALGO 2
 wait 30
 expect factory 3
-expect osc 1
+expect vmode 1
 tap SAVE
 wait 30
 expect dirty 0
+expect factory 10
 reboot
 wait 600
-expect osc 1
-expect rev 1
+expect factory 10
+expect vmode 1
