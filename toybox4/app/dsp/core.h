@@ -112,6 +112,8 @@ void core_seq_rest(int kind, int tie);
 void core_seq_delete(int kind);
 void core_seq_toggle(int kind);          /* run / stop the current track's sequencer */
 void core_panic(void);
+void core_overload(void);                /* the render ran late: a voice goes, fewer are allowed */
+void core_cpu(float load);               /* main loop, ~1 s: the render's load (0..1); room again: one more */
 /* the sampler: record the master output into a sample (synth or drum) while a key is held */
 void core_sample_arm(int kind);          /* the main loop has erased the flash; recording starts with sample_go */
 void core_sample_go(int on);
@@ -143,6 +145,9 @@ typedef struct {
     uint32_t sample_len;                     /* recorded so far (samples) */
     uint16_t voices, drums;
     uint32_t clip_n;                         /* events in the clipboard */
+    uint32_t shed;                           /* voices shed for time */
+    float cpu;                               /* the render's load (main loop's reading) */
+    uint8_t sv_lim, dv_lim;                  /* the voices allowed now */
 } core_view_t;
 extern volatile core_view_t CORE_VIEW;
 

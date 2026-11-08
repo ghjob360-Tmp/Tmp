@@ -1,0 +1,40 @@
+# the load: a late render sheds voices and allows fewer; room again lets them back; one core is said
+wait 1000
+tap EDIT
+wait 100
+key 0 down 100
+key 2 down 100
+key 4 down 100
+key 5 down 100
+key 7 down 100
+key 9 down 100
+key 11 down 100
+key 12 down 100
+wait 300
+expect voices 8
+expect sim_overload 1
+expect sim_overload 1
+expect sim_overload 1
+wait 100
+expect voices 5
+expect sv_lim 5
+expect shed 3
+key 14 down 100
+wait 100
+expect voices 5
+key 0 up
+key 2 up
+key 4 up
+key 5 up
+key 7 up
+key 9 up
+key 11 up
+key 12 up
+key 14 up
+wait 4500
+expect sv_lim 8
+expect cores 2
+expect sim_one_core 1
+wait 300
+expect cores 1
+shot one_core.png

@@ -518,6 +518,39 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 }
 
 void app_panic(void) { core_panic(); }
+void app_overload(void) { core_overload(); }
+
+/* ---------------------------------------------------------- the second core --- */
+/* Some FM-1s cannot run their second core reliably (it misreads shared RAM under load: felucca-bsp chip/fm1_cpu1.h).
+ * With cpu2_fallback the platform then retires it and the first core does all the work: the same sound, fewer
+ * voices at once. Said on the screen once, when it happens (or at the start, when it was barred before). */
+static int sim_one_core;                 /* (the host's tests: pretend it was retired) */
+static int cores_why(void) { return sim_one_core ? 1 : plat_cpu2_gave_up(); }
+static int cores_now(void) { return cores_why() || !plat_cpu2_on() ? 1 : 2; }
+static const char *cores_reason(int r)
+{
+    switch (r) {
+    case 1: return "CORE 2 MISREAD";
+    case 2: return "CORE 2 TOO SLOW";
+    case 3: return "CORE 2 OFF SINCE START";
+    case 4: return "CORE 2 FAULTED";
+    case 5: return "CORE 2 NO ANSWER";
+    default: return "CORE 2 OFF";
+    }
+}
+static void cores_service(uint32_t now)  /* main loop */
+{
+    static int said;
+    int r;
+    if (said || now < 1500u)             /* (after the start's own messages) */
+        return;
+    r = cores_why();
+    if (r) {
+        said = 1;
+        app_say("ONE CORE", cores_reason(r));
+    }
+}
+
 
 void app_init(void)
 {
@@ -558,6 +591,14 @@ void app_frame(void)
     input();
     sampler_service();
     usbh_service();
+    cores_service(ui_now);
+    {                                    /* the load, about once a second: the voices allowed grow back */
+        static uint32_t cpu_at;
+        if (ui_now - cpu_at > 1000u) {
+            cpu_at = ui_now;
+            core_cpu((float)plat_cpu_pct() * 0.01f);
+        }
+    }
     ann_tick(ui_now);
     for (t = 0; t < NTRK; t++)           /* the drum hits: when */
         for (p = 0; p < NDKEY; p++)
@@ -606,6 +647,11 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "loop_on")) *got = pj.loop_on;
     else if (!strcmp(what, "reverse")) *got = pj.reverse;
     else if (!strcmp(what, "voices")) *got = CORE_VIEW.voices;
+    else if (!strcmp(what, "sv_lim")) *got = CORE_VIEW.sv_lim;
+    else if (!strcmp(what, "shed")) *got = (int)CORE_VIEW.shed;
+    else if (!strcmp(what, "cores")) *got = cores_now();
+    else if (!strcmp(what, "sim_overload")) { core_overload(); *got = 1; }   /* (test hooks: they act) */
+    else if (!strcmp(what, "sim_one_core")) { sim_one_core = 1; *got = 1; }
     else if (!strcmp(what, "drums")) *got = CORE_VIEW.drums;
     else if (!strcmp(what, "loud")) *got = CORE_VIEW.out_peak > 0.01f;
     else if (!strcmp(what, "dirty")) *got = dirty;

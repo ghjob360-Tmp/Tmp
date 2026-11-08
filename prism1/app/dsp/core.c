@@ -107,6 +107,7 @@ static filt_t VF[NVOICE][2] PLAT_POOL;
 static float vout[NVOICE][4][CTL];       /* each voice's block: main L R, direct L R */
 static volatile uint8_t vplayed[NVOICE]; /* it wrote vout this block */
 static uint32_t v_order;
+static volatile uint32_t shed_req, calm;   /* late renders asked about, calm seconds since the last */
 static int hold_on, budget = 64, mono_last = -1;
 static float press, wheel, bend, tempo = 120.0f, clock_s;
 static uint32_t rng_g = 0x2545F491u;
@@ -391,6 +392,25 @@ static RAMC void take_input(void)
                 V[i].cost = voice_cost();
         tempo = 40.0f + 200.0f * pn[P_V_TEMPO];
     }
+    {                                    /* each late render: the oldest voice goes (a released one first) */
+        static uint32_t shed_done;
+        while (shed_done != shed_req) {
+            int best = -1, pass;
+            shed_done++;
+            for (pass = 0; pass < 2 && best < 0; pass++) {   /* the oldest released, else the oldest */
+                uint32_t bo = 0xFFFFFFFFu;
+                for (i = 0; i < NVOICE; i++)
+                    if (V[i].on && (pass || !V[i].gate) && V[i].order < bo) {
+                        bo = V[i].order;
+                        best = i;
+                    }
+            }
+            if (best >= 0) {
+                V[best].on = 0;
+                V[best].amp = 0.0f;
+            }
+        }
+    }
     press = in_press;
     wheel = in_wheel;
     bend = in_bend;
@@ -437,16 +457,19 @@ void core_midi(uint32_t st, uint32_t d1, uint32_t d2)
         core_hold(d2 >= 64u);
 }
 
-void core_overload(void)
+void core_overload(void)                 /* the render ran late: a voice goes now, and the budget shrinks */
 {
     int b = budget * 4 / 5;
     budget = b < 6 ? 6 : b;
+    shed_req++;
+    calm = 0;
     CORE_VIEW.shed++;
+    CORE_VIEW.budget = budget;
 }
 void core_cpu(float load)                /* main loop, about once a second: room again: a little more */
 {
     CORE_VIEW.cpu = load;
-    if (load < 0.6f && budget < 96)
+    if (load < 0.6f && ++calm >= 2u && budget < 96)   /* two calm seconds in a row: a little more */
         budget += 2;
     CORE_VIEW.budget = budget;
 }

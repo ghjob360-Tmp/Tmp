@@ -557,6 +557,10 @@ static void pic_voice(void)
     num_text((int32_t)(CORE_VIEW.cpu * 100.0f), t + 4);
     text_cat(t, "%", sizeof t);
     cv_text(8, 100, &FONT_T, t, G3);
+    copy_text(t, cores_now() == 2 ? "CORES 2" : "CORES 1: ", sizeof t);
+    if (cores_now() != 2)
+        text_cat(t, cores_reason(cores_why()), sizeof t);
+    cv_text(8, 128, &FONT_T, t, cores_now() == 2 ? G3 : AMBER);
     copy_text(t, "UNISON BUDGET ", sizeof t);
     num_text(CORE_VIEW.budget, t + 14);
     cv_text(8, 114, &FONT_T, t, G3);

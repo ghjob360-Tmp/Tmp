@@ -78,6 +78,37 @@ static void usbh_mark(int32_t x, int32_t y, uint16_t on_c, uint16_t look_c)
     cv_text(x, y, &FONT_T, "USB", st == USBH_CONNECTED ? on_c : look_c);
 }
 
+/* ---------------------------------------------------------- the second core --- */
+/* Some FM-1s cannot run their second core reliably (it misreads shared RAM under load: felucca-bsp chip/fm1_cpu1.h).
+ * With cpu2_fallback the platform then retires it and the first core does all the work: the same sound, fewer
+ * voices at once. Said on the screen once, when it happens (or at the start, when it was barred before). */
+static int sim_one_core;                 /* (the host's tests: pretend it was retired) */
+static int cores_why(void) { return sim_one_core ? 1 : plat_cpu2_gave_up(); }
+static int cores_now(void) { return cores_why() || !plat_cpu2_on() ? 1 : 2; }
+static const char *cores_reason(int r)
+{
+    switch (r) {
+    case 1: return "CORE 2 MISREAD";
+    case 2: return "CORE 2 TOO SLOW";
+    case 3: return "CORE 2 OFF SINCE START";
+    case 4: return "CORE 2 FAULTED";
+    case 5: return "CORE 2 NO ANSWER";
+    default: return "CORE 2 OFF";
+    }
+}
+static void cores_service(uint32_t now)  /* main loop */
+{
+    static int said;
+    int r;
+    if (said || now < 1500u)             /* (after the start's own messages) */
+        return;
+    r = cores_why();
+    if (r) {
+        said = 1;
+        app_say("ONE CORE", cores_reason(r));
+    }
+}
+
 static void changed(void)
 {
     dirty = 1;

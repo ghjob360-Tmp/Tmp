@@ -9,6 +9,8 @@
 #define APP_SPLASH_RGB RGB(255, 118, 46)
 #define APP_BLOCK 256u
 #define APP_USB_HOST_NAME                /* the USB host reads its keyboard's name */
+#define APP_OVERLOAD                     /* the render over 90 % of its time: shed a voice */
+void app_overload(void);
 #define APP_TOUCH                        /* velocity from the keys */
 
 /* the store: only the panel calibration (at Felucca's settings pair); the project, the library, the tape and the

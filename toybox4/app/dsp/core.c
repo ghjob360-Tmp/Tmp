@@ -198,6 +198,48 @@ static RAMC void synth_start(sv_t *v, int i, int note, int vel, float det, float
     I[i].fade_t = 0.0f;
 }
 
+/* the load: voices allowed now (shrunk when the render runs late, grown back when there is room) */
+static volatile int sv_lim = NSV, dv_lim = NDV;
+static volatile uint32_t shed_req;
+static RAMC int n_active_sv(void)
+{
+    int j, n = 0;
+    for (j = 0; j < NSV; j++)
+        n += SV[j].active != 0;
+    return n;
+}
+static RAMC int n_active_dv(void)
+{
+    int j, n = 0;
+    for (j = 0; j < NDV; j++)
+        n += DV[j].active != 0;
+    return n;
+}
+static RAMC void shed_one(void)          /* the render ran late: the oldest voice goes (a released one first) */
+{
+    int j, best = -1;
+    uint32_t oldest = 0xFFFFFFFFu;
+    for (j = 0; j < NSV; j++)
+        if (SV[j].active) {
+            uint32_t a = SV[j].age - (SV[j].gate ? 0u : 0x40000000u);
+            if (a < oldest) {
+                oldest = a;
+                best = j;
+            }
+        }
+    if (best >= 0) {
+        SV[best].active = 0;
+        return;
+    }
+    for (j = 0; j < NDV; j++)
+        if (DV[j].active && DV[j].age < oldest) {
+            oldest = DV[j].age;
+            best = j;
+        }
+    if (best >= 0)
+        DV[best].active = 0;
+}
+
 static RAMC sv_t *synth_alloc(int i, int note)
 {
     int j, best = 0;
@@ -205,12 +247,13 @@ static RAMC sv_t *synth_alloc(int i, int note)
     for (j = 0; j < NSV; j++)
         if (SV[j].active && SV[j].inst == (uint8_t)i && SV[j].note == (uint8_t)note && !SV[j].uni)
             return &SV[j];
-    for (j = 0; j < NSV; j++)
-        if (!SV[j].active)
-            return &SV[j];
-    for (j = 0; j < NSV; j++) {
+    if (n_active_sv() < sv_lim)
+        for (j = 0; j < NSV; j++)
+            if (!SV[j].active)
+                return &SV[j];
+    for (j = 0; j < NSV; j++) {          /* (the ones sounding: below the limit some are free) */
         uint32_t a = SV[j].age - (SV[j].gate ? 0u : 0x40000000u);
-        if (a < oldest) {
+        if (SV[j].active && a < oldest) {
             oldest = a;
             best = j;
         }
@@ -316,12 +359,13 @@ static RAMC void drum_hit(int i, int note, int vel, int on)
     for (j = 0; j < NDV && !d; j++)      /* the same key retriggers its voice; a closed hat chokes an open one */
         if (DV[j].active && DV[j].inst == (uint8_t)i && (DV[j].key == (uint8_t)key || (key == 7 && DV[j].key == 8)))
             d = &DV[j];
-    for (j = 0; j < NDV && !d; j++)
-        if (!DV[j].active)
-            d = &DV[j];
+    if (n_active_dv() < dv_lim)
+        for (j = 0; j < NDV && !d; j++)
+            if (!DV[j].active)
+                d = &DV[j];
     if (!d) {
         for (j = 0; j < NDV; j++)
-            if (DV[j].age < oldest) {
+            if (DV[j].active && DV[j].age < oldest) {
                 oldest = DV[j].age;
                 best = j;
             }
@@ -548,8 +592,39 @@ static RAMC void job_odd(uint32_t arg)
 }
 
 /* ------------------------------------------------------------------ commands --- */
+static volatile uint32_t calm;           /* seconds the render has kept up since the last late one */
+void core_overload(void)                 /* (the platform: the render took over 90 % of its time) */
+{
+    if (sv_lim > 3)
+        sv_lim--;
+    if (dv_lim > 4)
+        dv_lim--;
+    shed_req++;
+    calm = 0;
+    CORE_VIEW.shed++;
+    CORE_VIEW.sv_lim = (uint8_t)sv_lim;
+    CORE_VIEW.dv_lim = (uint8_t)dv_lim;
+}
+void core_cpu(float load)                /* main loop, about once a second: room again, one voice more */
+{
+    CORE_VIEW.cpu = load;
+    if (load < 0.6f && ++calm >= 2u) {  /* two calm seconds in a row: one voice back */
+        if (sv_lim < NSV)
+            sv_lim++;
+        else if (dv_lim < NDV)
+            dv_lim++;
+    }
+    CORE_VIEW.sv_lim = (uint8_t)sv_lim;
+    CORE_VIEW.dv_lim = (uint8_t)dv_lim;
+}
+
 static RAMC void take_input(void)
 {
+    static uint32_t shed_done;
+    while (shed_done != shed_req) {      /* (each late render: one voice) */
+        shed_done++;
+        shed_one();
+    }
     if (pending) {
         r_idx ^= 1u;
         pending = 0;

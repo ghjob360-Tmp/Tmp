@@ -232,6 +232,7 @@ void app_frame(void)
     input();
     tables_service();
     usbh_service();
+    cores_service(ui_now);
     if (set_dirty && ui_now - changed_at > 3000u)   /* the edits kept, a while after the last */
         settings_save();
     if (ui_now - cpu_at > 1000u) {
@@ -282,6 +283,10 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "tables_ready")) *got = WT.building < 0;
     else if (!strcmp(what, "budget")) *got = CORE_VIEW.budget;
     else if (!strcmp(what, "hold")) *got = ui.hold;
+    else if (!strcmp(what, "shed")) *got = (int)CORE_VIEW.shed;
+    else if (!strcmp(what, "cores")) *got = cores_now();
+    else if (!strcmp(what, "sim_overload")) { core_overload(); *got = 1; }   /* (test hooks: they act) */
+    else if (!strcmp(what, "sim_one_core")) { sim_one_core = 1; *got = 1; }
     else if (!strcmp(what, "nuser")) *got = NUSER;
     else if (!strcmp(what, "user_used")) {
         int i, n = 0;

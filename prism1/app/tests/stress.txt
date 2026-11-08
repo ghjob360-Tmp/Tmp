@@ -27,3 +27,16 @@ key 24 down 100
 wait 6000
 expect loud 1
 shot stress.png
+# the load: late renders shed voices now; one core is said and shown
+expect sim_overload 1
+expect sim_overload 1
+wait 100
+expect shed 2
+expect cores 2
+expect sim_one_core 1
+wait 300
+expect cores 1
+tap HOME
+tap HOME
+wait 200
+shot voice_one_core.png

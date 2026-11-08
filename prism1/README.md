@@ -3,8 +3,8 @@
 把 [Vital](https://github.com/mtytel/vital)（Matt Tytel，GPL-3.0）的聲音架構和互動方式，盡量完整地搬到 M-VAVE FM-1 的兩顆 360 MHz 核心上。Vital 的系統架構與互動整理在 [`docs/VITAL_REFERENCE.md`](docs/VITAL_REFERENCE.md)，每一項都對照了 PRISM-1 的做法。
 
 同一份原始碼編出：
-- `dist/prism-1-1.1.fwsc`：燒進 FM-1 實機
-- `dist/prism-1-1.1.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/prism-1-1.2.fwsc`：燒進 FM-1 實機
+- `dist/prism-1-1.2.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
 - `dist/prism-1-demo.mp3`：24 個出廠音色各彈一段，用 host 模擬器錄的，和實機是同一份 DSP
 
 授權 **GPL-3.0-only**（依循 Vital 的公式），詳見 `LICENSING.md`。本專案與 Vital Audio、M-VAVE 無關。
@@ -122,13 +122,21 @@
 
 一度把 wavetable 減到 24 幀；sampler 搬去快閃後，省下的 RAM 又把它加回 32 幀。
 
-最後的用量（`./build.sh --release 1.1`）：
+最後的用量（`./build.sh --release 1.2`）：
 
 | | 用量 | 上限 |
 |---|---|---|
 | 快閃映像 | 526 KB（其中取樣 288 KB）| 581.5 KB |
 | SRAM | 488.3 KB：RAM 程式碼 67 KB、.data+.bss 65 KB、pool 356 KB（4 張 wavetable 緩衝 129 KB、16 個濾波器 69 KB、效果 104 KB…）| 496.6 KB（剩 8.3 KB，build 規定至少 8 KB）|
 | 快閃資料區 XDATA1 | 46 個使用者音色 | 全部 |
+
+## 運算吃緊時、第二顆核心不能用時
+
+- **自動減量**：render 來不及（超過時間的 90%）時，立刻停掉一個 voice（先停已經放開的，再停最舊的），並縮小 unison 預算。之後要連續 2 秒負載都低於 60%，才每秒放寬一點。所以吃緊時只會少幾個同時發聲的音，不會斷音或爆音。
+- **第二顆核心**：有些 FM-1 的第二核心在高負載時會讀錯共用 RAM（felucca-bsp `chip/fm1_cpu1.h`，社群在多台機器上回報過）。這個韌體開了 `cpu2_fallback`，碰到這種情況，平台會停用第二核心，由第一核心獨自做完全部工作，直到關機。
+  - 聲音不變，只是能同時發聲的數量大約減半，上面的自動減量會處理。
+  - 發生時（或開機時本來就已經停用）提示列會顯示「ONE CORE」和原因：讀錯、太慢、當掉、沒回應、開機前已停用。VOICE 頁會常駐顯示「CORES 2」或「CORES 1」加原因。
+- 測試：`app/tests/stress.txt` 在模擬器裡模擬過載和第二核心停用。
 
 ## 審視後的改進
 
@@ -148,8 +156,8 @@
 app/build/host/prism-1_host app/tests/basic.txt app/build/host    # 冒煙測試
 app/build/host/prism-1_host app/tests/sounds.txt app/build/host   # 24 個音色，錄成 sounds.wav
 app/build/host/prism-1_host app/tests/stress.txt app/build/host   # 最壞情況
-./build.sh --release 1.1 && ./build.sh --rfm1 --release 1.1
-node base/tests/rfm1_test.mjs app/build/prism-1-1.1.rfm1
+./build.sh --release 1.2 && ./build.sh --rfm1 --release 1.2
+node base/tests/rfm1_test.mjs app/build/prism-1-1.2.rfm1
 ```
 
 `basic.txt` 涵蓋：

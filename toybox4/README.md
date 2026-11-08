@@ -10,8 +10,8 @@
 
 OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這次的設計就是以它為準。
 
-- `dist/toybox-4-1.1.fwsc`：燒進 FM-1 實機
-- `dist/toybox-4-1.1.rfm1`：在 RemoteFM1 裡跑
+- `dist/toybox-4-1.2.fwsc`：燒進 FM-1 實機
+- `dist/toybox-4-1.2.rfm1`：在 RemoteFM1 裡跑
 - `dist/toybox-4-demo.mp3`：demo，約 58 秒。流程是：
   1. 開機自帶的 demo 磁帶播放
   2. 在 T3 疊錄一段旋律
@@ -162,7 +162,15 @@ OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這�
   - ARP：4 種走法、1–4 個八度、觸發 pattern
   - LATCH：分鍵點、單音或複音、移調
 
-## 預算（實測，`./build.sh --release 1.1`）
+## 運算吃緊時、第二顆核心不能用時
+
+- **自動減量**：render 來不及（超過時間的 90%）時，立刻停掉一個 voice（先停已經放開的，再停最舊的），並讓合成（最少 3 個）和鼓（最少 4 個）的同時發聲上限各減一。之後要連續 2 秒負載都低於 60%，才每秒放回一個。所以吃緊時只會少幾個同時發聲的音，不會斷音或爆音。
+- **第二顆核心**：有些 FM-1 的第二核心在高負載時會讀錯共用 RAM（felucca-bsp `chip/fm1_cpu1.h`，社群在多台機器上回報過）。這個韌體開了 `cpu2_fallback`，碰到這種情況，平台會停用第二核心，由第一核心獨自做完全部工作，直到關機。
+  - 聲音不變，只是能同時發聲的數量大約減半，上面的自動減量會處理。
+  - 發生時（或開機時本來就已經停用）提示列會顯示「ONE CORE」和原因：讀錯、太慢、當掉、沒回應、開機前已停用。
+- 測試：`app/tests/load.txt` 在模擬器裡模擬過載和第二核心停用。
+
+## 預算（實測，`./build.sh --release 1.2`）
 
 | | 用量 | 上限 |
 |---|---|---|
@@ -190,8 +198,8 @@ OP-1 的行為整理在 [`docs/OP1_REFERENCE.md`](docs/OP1_REFERENCE.md)，這�
 ```sh
 ./build.sh --host && app/build/host/toybox-4_host app/tests/basic.txt app/build/host   # 冒煙測試，全部 ok
 app/build/host/toybox-4_host app/tests/demo.txt app/build/host                        # demo.wav
-./build.sh --release 1.1 && ./build.sh --rfm1 --release 1.1
-node base/tests/rfm1_test.mjs app/build/toybox-4-1.1.rfm1
+./build.sh --release 1.2 && ./build.sh --rfm1 --release 1.2
+node base/tests/rfm1_test.mjs app/build/toybox-4-1.2.rfm1
 ```
 
 `basic.txt` 涵蓋：
