@@ -488,6 +488,10 @@ function resPayload(region) {
   return { payload, crc };
 }
 
+// the largest SysEx handed to the browser's MIDI output (limitSend); Infinity: no limit (the tests)
+let SEND_MAX = Infinity;
+function limitSend(n) { SEND_MAX = n; }
+
 // one MIDI in/out pair with a SysEx queue
 class Link {
   constructor(input, output) {
@@ -501,6 +505,7 @@ class Link {
   get lost() { return this.input.state === "disconnected" || this.output.state === "disconnected"; }
   // false when the port is gone (unplugged): WebMIDI throws on a disconnected output
   send(bytes) {
+    if (bytes.length > SEND_MAX) return false;   // (never more than the OS's MIDI takes in one message)
     try { this.output.send(bytes); return true; } catch (_) { return false; }
   }
   drain() { this.q.length = 0; }
@@ -513,7 +518,11 @@ class Link {
     }
     return this.q.shift() || null;
   }
-  close() { this.input.onmidimessage = null; }
+  close() {                                   // (and the ports: none left open under a restarting FM-1)
+    this.input.onmidimessage = null;
+    try { const p = this.input.close && this.input.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    try { const p = this.output.close && this.output.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+  }
 }
 
 // send a handshake -> the identity answered, null (no answer in ms), false (the send failed)
@@ -1088,10 +1097,24 @@ const sayPct = (k, pct) => {
 };
 const say = (txt) => { lastKey = null; $("alert").textContent = ""; $("status").textContent = txt; };
 /* follows the newest line, unless the reader has scrolled up to look at an earlier one */
-const log = (t) => {
+const logq = [];
+let logLines = 0, logFrame = 0;
+const logFlush = () => {                 /* once a frame: the lines since, and only the last 400 kept */
+  logFrame = 0;
   const el = $("log"), atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-  el.append(t + "\n");
+  el.append(logq.join("\n") + "\n");
+  logLines += logq.length;
+  logq.length = 0;
+  if (logLines > 600) {
+    const keep = el.textContent.split("\n").slice(-401).join("\n");
+    el.textContent = keep;
+    logLines = 400;
+  }
   if (atEnd) el.scrollTop = el.scrollHeight;
+};
+const log = (t) => {
+  logq.push(t);
+  if (!logFrame) logFrame = requestAnimationFrame(logFlush);
 };
 let image = null, boot = null, res = null;
 const meta = {"version": "0.3", "product": "FM-1_94000300", "pkg": "../firmware/chain-1-0.3.fwsc", "backup": false, "res": null, "boot": {"pkg": "../firmware/m-bootloader-1.2.fwsc", "version": "1.2", "sha256": "0e89141f52d1f2d62198d4f69147a2c15c8360806e64d48002990a6fdab6d6dd"}};
@@ -1193,7 +1216,7 @@ $("stockfile").addEventListener("change", async (e) => {
 const PICKED = "fm1-ports";
 let picked = [];
 try { picked = JSON.parse(localStorage.getItem(PICKED) || "[]").filter((x) => typeof x === "string"); } catch (_) { /* none */ }
-const updater = (midi, lg) => { const up = new Updater(midi, lg); picked.forEach((n) => up.allow(n)); return up; };
+const updater = (midi, lg) => { const up = new Updater(midi, lg); up.classic = true; limitSend(1000); picked.forEach((n) => up.allow(n)); return up; };
 /* and the ports an FM-1 answered the screen reader's HELLO on (Updater.answering: an fm1-base firmware under any name),
    kept as picks */
 function remember(names) {
