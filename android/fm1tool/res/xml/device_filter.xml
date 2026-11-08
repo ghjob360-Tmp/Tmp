@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- fm1-base firmware (1209:0001), the Felucca update loader (1209:0002), the chip's UBOOT mode (4C4A:8057) -->
+    <usb-device vendor-id="4617" product-id="1" />
+    <usb-device vendor-id="4617" product-id="2" />
+    <usb-device vendor-id="19530" product-id="32855" />
+</resources>
