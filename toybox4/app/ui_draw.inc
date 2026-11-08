@@ -152,7 +152,7 @@ static void pic_tape(void)
         int32_t cx = b ? 186 : 54, cy = 48;
         float pack = b ? used : 1.0f - used;
         disc(cx, cy, 10 + (int32_t)(pack * 16.0f), RGB(56, 42, 34));
-        ring(cx, cy, 27, G2);
+        circle(cx, cy, 27, G2);
         disc(cx, cy, 5, G3);
         for (i = 0; i < 3; i++) {
             float a = -rl * (b ? 1.0f : 1.4f) + (float)i / 3.0f;

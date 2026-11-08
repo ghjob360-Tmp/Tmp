@@ -288,7 +288,7 @@ static void pic_lfo(int k)
         for (i = 0; i < LFO_PTS; i++) {
             int32_t x = 8 + i * 224 / LFO_PTS, y = 130 - (int32_t)((float)pt.lfo_y[k][i] / 255.0f * 98.0f);
             if (i == ui_dpt[k] && row == 3)
-                ring(x, y, 5, WHITE);
+                circle(x, y, 5, WHITE);
             disc(x, y, 2, row == 3 ? WHITE : G3);
         }
     }

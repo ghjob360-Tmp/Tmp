@@ -69,7 +69,7 @@ static void target_row(float km, float kp, int32_t y)
         if (i == p)
             disc(x, yy + 4, 4, kcol(3));
         else
-            ring(x, yy + 4, 3, i < 4 ? KD[i & 3] : G2);
+            circle(x, yy + 4, 3, i < 4 ? KD[i & 3] : G2);
     }
 }
 
@@ -85,8 +85,8 @@ static void pic_string(const float *k, float env)
         cv_rect(8 + i * 2, 40 - ri(v * 14.0f), 2, 2, kcol(1));
     }
     /* the body: two hollows that ring (GLO K3) */
-    ring(100, 118, 9 + ri(9.0f * k[6]), gcol(2));
-    ring(140, 118, 6 + ri(6.0f * k[6]), gcol(2));
+    circle(100, 118, 9 + ri(9.0f * k[6]), gcol(2));
+    circle(140, 118, 6 + ri(6.0f * k[6]), gcol(2));
     /* the pegs: tension turns them */
     for (i = 0; i < 2; i++) {
         int32_t x = i ? x1 + 8 : x0 - 8, ex, ey;
@@ -207,7 +207,7 @@ static void pic_fm(const float *k, float env)
             float r = 12.0f + 26.0f * k[0] * (j == 3 ? 0.8f : 1.0f), sp = 0.08f + (0.1f + hsh((uint32_t)(sel(k[1], 12) * 4 + j)) * 0.5f) * (0.3f + k[1]);
             float a = ui_t * sp * (j & 1 ? 1.0f : -1.0f) + (float)j * 0.3f;
             int tj = tgt[j];
-            ring(ri(X[tj]), ri(Y[tj]), ri(r), mix565(KC[0], BG, 0.55f - 0.3f * (float)lit(0)));
+            circle(ri(X[tj]), ri(Y[tj]), ri(r), mix565(KC[0], BG, 0.55f - 0.3f * (float)lit(0)));
             X[j] = X[tj] + sn(a) * r;
             Y[j] = Y[tj] - sn(a + 0.25f) * r * 0.8f;
         }
@@ -226,7 +226,7 @@ static void pic_fm(const float *k, float env)
         int32_t x = ri(X[j]), y = ri(Y[j]);
         if (tgt[j] < 0) {
             if (k[3] > 0.02f)            /* detune: a ghost beside it */
-                ring(x + ri(sn(ui_t * 0.5f) * 6.0f * k[3]), y, 8 + ri(env * 5.0f), kcol(3));
+                circle(x + ri(sn(ui_t * 0.5f) * 6.0f * k[3]), y, 8 + ri(env * 5.0f), kcol(3));
             disc(x, y, 6 + ri(env * 5.0f), K_WHITE);
         } else {
             disc(x, y, 5, kcol(1));
@@ -447,7 +447,7 @@ static void pic_voltage(const float *k, float env)
     for (i = 0; i < 4; i++) {            /* the phaser's four stages, turning (white) */
         int32_t a, b;
         rot(0.0f, -5.0f, ui_t * (0.1f + 0.8f * k[2]) + (float)i * 0.25f, 24 + (i & 1) * 18, 40 + (i >> 1) * 18, &a, &b);
-        ring(24 + (i & 1) * 18, 40 + (i >> 1) * 18, 6, kcol(2));
+        circle(24 + (i & 1) * 18, 40 + (i >> 1) * 18, 6, kcol(2));
         disc(a, b, 2, kcol(2));
     }
     for (i = 0; i <= 40; i++) {          /* the folder (green) */
@@ -597,7 +597,7 @@ static void fx_echo(const float *k, float lv)
             break;
         if (k[5] > 0.5f)                 /* ping-pong (GLO K2) */
             y += (j & 1 ? -1.0f : 1.0f) * 16.0f * (k[5] - 0.5f) * 2.0f;
-        ring(ri(x), ri(y), r, mix565(K_WHITE, BG, 1.0f - f * 0.9f - 0.05f));
+        circle(ri(x), ri(y), r, mix565(K_WHITE, BG, 1.0f - f * 0.9f - 0.05f));
         if (f > 0.3f)
             disc(ri(x), ri(y), r / 2, mix565(KC[2], BG, 1.0f - f));
         cv_rect(ri(x) - 1, 112, 2, 6, kcol(0));
@@ -773,7 +773,7 @@ static void fx_doppler(const float *k, float lv)
     float x = 104.0f + 62.0f * sn(ui_t * sp);
     for (j = 1; j <= 3 + sel(k[2], 6); j++) {   /* the fronts it left behind (white: their number) */
         float tb = (float)j * 0.6f, xo = 104.0f + 62.0f * sn((ui_t - tb) * sp), r = fm_minf(tb * (26.0f + 30.0f * fm_fabsf(dir)), 44.0f);
-        ring(ri(xo), 72, ri(r), mix565(kcol(2), BG, (float)j * 0.1f));
+        circle(ri(xo), 72, ri(r), mix565(kcol(2), BG, (float)j * 0.1f));
     }
     if (k[3] > 0.05f) {                  /* the sideband (orange) */
         for (j = 0; j < 4; j++)
@@ -967,8 +967,8 @@ static void pic_lfo(int type, const mod_t *m, float val, float ph)
         break;
     }
     default: {                           /* MIDI: a socket, its pins lit by what arrives */
-        ring(70, 66, 30, K_WHITE);
-        ring(70, 66, 29, K_WHITE);
+        circle(70, 66, 30, K_WHITE);
+        circle(70, 66, 29, K_WHITE);
         cv_rect(66, 34, 8, 4, K_WHITE);
         for (i = 0; i < 5; i++) {
             int32_t x, y;

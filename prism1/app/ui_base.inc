@@ -54,7 +54,7 @@ static void disc(int32_t cx, int32_t cy, int32_t r, uint16_t c)
         cv_rect(cx - w, cy + y, 2 * w + 1, 1, c);
     }
 }
-static void ring(int32_t cx, int32_t cy, int32_t r, uint16_t c)
+static void circle(int32_t cx, int32_t cy, int32_t r, uint16_t c)
 {
     int i, n = r < 12 ? 24 : 48;
     int32_t px = cx, py = cy - r;
