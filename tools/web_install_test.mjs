@@ -31,9 +31,14 @@ const done = (flash, image) => {
 function loader(flash) {
   const proc = spawn(exe, ["run", flash], { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, LDR_PIPE_TRY_MS: "3000" } });
   const L = { proc, sent: [], reqs: 0, exited: null, closed: 0 };
-  const input = { name: "Felucca Update", state: "connected", open: async () => {}, close: async () => { L.closed++; }, onmidimessage: null };
-  const output = { name: "Felucca Update", state: "connected", open: async () => {}, close: async () => { L.closed++; },
-    send: (b) => { if (output.state !== "connected") throw new Error("gone"); L.sent.push(b.length); proc.stdin.write(Buffer.from(b)); } };
+  // as a browser's ports: close() takes effect a moment later (not awaited, it lands after an open() that follows it),
+  // and a closed input hears nothing
+  const port = (o) => Object.assign(o, { connection: "open",
+    open: async () => { o.connection = "open"; },
+    close: () => { L.closed++; return new Promise((r) => setTimeout(() => { o.connection = "closed"; r(); }, 0)); } });
+  const input = port({ name: "Felucca Update", state: "connected", onmidimessage: null });
+  const output = port({ name: "Felucca Update", state: "connected",
+    send: (b) => { if (output.state !== "connected") throw new Error("gone"); L.sent.push(b.length); proc.stdin.write(Buffer.from(b)); } });
   proc.on("exit", (c) => { L.exited = c; input.state = output.state = "disconnected"; });
   proc.stdin.on("error", () => {});
   let buf = [];
@@ -44,7 +49,7 @@ function loader(flash) {
       if (x === 0xF7 && buf[0] === 0xF0) {
         const u = unpack7(buf.slice(1, -1));
         if (u.length === 15 && u[2] === 0x30) L.reqs++;
-        input.onmidimessage && input.onmidimessage({ data: Uint8Array.from(buf), target: input });
+        if (input.connection === "open") input.onmidimessage && input.onmidimessage({ data: Uint8Array.from(buf), target: input });
         buf = [];
       }
     }
@@ -54,20 +59,22 @@ function loader(flash) {
   return L;
 }
 
-{                                        // the page's settings: the whole install, no message over 1000 bytes
-  limitSend(1000);
+{                                        // the page's settings and its order: a probe of the port first (the page's
+  limitSend(1000);                       // pick), then the install: the whole of it, no message over 1000 bytes
   const { flash, image } = device("web");
   const L = loader(flash);
   const up = new Updater(L.access);
   up.classic = true;
   up.pause = 0;
   let ok = false, code = null;
+  const id = await up.probe("Felucca Update");
+  check(!!id, "the probe finds the device");
   try { ok = await up.resume(image, () => {}); } catch (e) { code = e.code || String(e); }
   const ex = await L.wait();
   const big = Math.max(...L.sent);
   check(ok && ex === 0 && done(flash, image), `the classic install, written and checked (${L.reqs} reads; ${code || "no error"})`);
   check(big <= 1000, `no message to the device over 1000 bytes (the largest: ${big})`);
-  check(L.closed > 0, "the link's ports closed when done");
+  check(L.closed === 0, "no port closed under the page (a close lands after the next open: the FM-1 not found)");
 }
 {                                        // the guard under it: a fast install's 4 KiB answers are refused, not sent
   limitSend(1000);

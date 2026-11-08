@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MPL-2.0
 """Make docs/ (GitHub Pages): an install site per firmware, with fm1-base's tools/make_site.py, from a copy of
-fm1-base's web installer with these fixes applied (fm1-base, a submodule, is not changed):
+fm1-base's web installer with these fixes applied (fm1-base, a submodule, is not changed). (A fix that closed
+each link's ports was taken out again: a browser's close() lands after the open() that follows it, so the page's
+probe left the port closed under the install: "FM-1 not found". tools/web_install_test.mjs keeps that case.)
 
  1. The web installer never uses the fast install: its 4 KiB answers are SysEx messages of ~4.7 KB, more than
     Android's MIDI framework takes in one message (MidiPortImpl: 1015 bytes) and more than some Windows MIDI drivers
@@ -9,10 +11,7 @@ fm1-base's web installer with these fixes applied (fm1-base, a submodule, is not
     Windows Chrome crashed. The classic protocol's answers are 512 bytes of data (~600 bytes of SysEx).
  2. A guard under that: no SysEx over SEND_MAX bytes ever reaches the browser's MIDI output (the send fails instead,
     and the install stops cleanly).
- 3. A link's ports are closed when it is done with (the installer used to leave every port it tried open, then the
-    FM-1 restarted into its update loader under them: a device going away under an open port is the case Chrome's
-    MIDI back ends handle worst).
- 4. The log is written in batches, once a frame, and keeps its last 400 lines (it took a line, a DOM text node and a
+ 3. The log is written in batches, once a frame, and keeps its last 400 lines (it took a line, a DOM text node and a
     forced layout per request: a few thousand of each in an install).
 
   python3 tools/make_sites.py            the fix tested (tools/web_install_test.mjs: node, cc), then every
@@ -57,12 +56,6 @@ def patched_base(base, tmp):
               "  send(bytes) {\n"
               "    if (bytes.length > SEND_MAX) return false;   // (never more than the OS's MIDI takes in one message)\n"
               "    try { this.output.send(bytes); return true; } catch (_) { return false; }\n  }", "fm1ota.js send")
-    s = patch(s, "  close() { this.input.onmidimessage = null; }",
-              "  close() {                                   // (and the ports: none left open under a restarting FM-1)\n"
-              "    this.input.onmidimessage = null;\n"
-              "    try { const p = this.input.close && this.input.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}\n"
-              "    try { const p = this.output.close && this.output.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}\n"
-              "  }", "fm1ota.js close")
     ota.write_text(s, encoding="utf-8")
     page = t / "web" / "installer.html"
     h = page.read_text(encoding="utf-8")

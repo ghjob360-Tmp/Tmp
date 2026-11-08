@@ -518,11 +518,7 @@ class Link {
     }
     return this.q.shift() || null;
   }
-  close() {                                   // (and the ports: none left open under a restarting FM-1)
-    this.input.onmidimessage = null;
-    try { const p = this.input.close && this.input.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
-    try { const p = this.output.close && this.output.close(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
-  }
+  close() { this.input.onmidimessage = null; }
 }
 
 // send a handshake -> the identity answered, null (no answer in ms), false (the send failed)
