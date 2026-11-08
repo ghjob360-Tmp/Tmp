@@ -1190,14 +1190,14 @@ static ARM_CODE uint32_t t32(arm_t *m, uint32_t pc, uint32_t hw1, uint32_t hw2)
             break;
         }
         case 5: case 6: {                                   /* SMMLA / SMMUL, SMMLS (R: rounded) */
-            int64_t p = (int64_t)(int32_t)a * (int32_t)b, s;
+            uint64_t p = (uint64_t)((int64_t)(int32_t)a * (int32_t)b), s;   /* (modulo 2^64, as the M4) */
             if (o1 == 5u)
-                s = (ra == 15u ? 0 : (int64_t)(uint64_t)acc << 32) + p;
+                s = (ra == 15u ? 0u : (uint64_t)acc << 32) + p;
             else
-                s = ((int64_t)(uint64_t)acc << 32) - p;
+                s = ((uint64_t)acc << 32) - p;
             if (hw2 & 0x10u)
-                s += 0x80000000;
-            r[rd] = (uint32_t)((uint64_t)s >> 32);
+                s += 0x80000000u;
+            r[rd] = (uint32_t)(s >> 32);
             break;
         }
         default: {                                          /* USAD8 / USADA8 */
@@ -1235,7 +1235,8 @@ static ARM_CODE uint32_t t32(arm_t *m, uint32_t pc, uint32_t hw1, uint32_t hw2)
             r[hi] = b == 0u ? 0u : a / b;
             break;
         case 4: {                                           /* SMLAL, SMLAL<x><y>, SMLALD */
-            int64_t acc = (int64_t)((uint64_t)r[hi] << 32 | r[lo]), p;
+            uint64_t acc = (uint64_t)r[hi] << 32 | r[lo];
+            int64_t p;
             if (o2 == 0u)
                 p = (int64_t)(int32_t)a * (int32_t)b;
             else if ((o2 & 0xCu) == 8u)
@@ -1245,19 +1246,19 @@ static ARM_CODE uint32_t t32(arm_t *m, uint32_t pc, uint32_t hw1, uint32_t hw2)
                 p = (int64_t)((int16_t)a * (int16_t)bb) + (int64_t)((int16_t)(a >> 16) * (int16_t)(bb >> 16));
             } else
                 UNDEF();
-            acc += p;
+            acc += (uint64_t)p;                             /* (modulo 2^64) */
             r[lo] = (uint32_t)acc;
-            r[hi] = (uint32_t)((uint64_t)acc >> 32);
+            r[hi] = (uint32_t)(acc >> 32);
             break;
         }
         case 5: {                                           /* SMLSLD */
-            int64_t acc = (int64_t)((uint64_t)r[hi] << 32 | r[lo]);
+            uint64_t acc = (uint64_t)r[hi] << 32 | r[lo];
             uint32_t bb = (o2 & 1u) ? ror32(b, 16) : b;
             if ((o2 & 0xEu) != 0xCu)
                 UNDEF();
-            acc += (int64_t)((int16_t)a * (int16_t)bb) - (int64_t)((int16_t)(a >> 16) * (int16_t)(bb >> 16));
+            acc += (uint64_t)((int64_t)((int16_t)a * (int16_t)bb) - (int64_t)((int16_t)(a >> 16) * (int16_t)(bb >> 16)));
             r[lo] = (uint32_t)acc;
-            r[hi] = (uint32_t)((uint64_t)acc >> 32);
+            r[hi] = (uint32_t)(acc >> 32);
             break;
         }
         case 6: {                                           /* UMLAL / UMAAL */
