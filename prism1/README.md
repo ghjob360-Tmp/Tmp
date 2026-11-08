@@ -3,8 +3,8 @@
 把 [Vital](https://github.com/mtytel/vital)（Matt Tytel，GPL-3.0）的聲音架構和互動方式，盡量完整地搬到 M-VAVE FM-1 的兩顆 360 MHz 核心上。Vital 的系統架構與互動整理在 [`docs/VITAL_REFERENCE.md`](docs/VITAL_REFERENCE.md)，每一項都對照了 PRISM-1 的做法。
 
 同一份原始碼編出：
-- `dist/prism-1-1.2.fwsc`：燒進 FM-1 實機
-- `dist/prism-1-1.2.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
+- `dist/prism-1-1.3.fwsc`：燒進 FM-1 實機
+- `dist/prism-1-1.3.rfm1`：在 RemoteFM1 裡跑（WebAssembly）
 - `dist/prism-1-demo.mp3`：24 個出廠音色各彈一段，用 host 模擬器錄的，和實機是同一份 DSP
 
 授權 **GPL-3.0-only**（依循 Vital 的公式），詳見 `LICENSING.md`。本專案與 Vital Audio、M-VAVE 無關。
@@ -122,7 +122,7 @@
 
 一度把 wavetable 減到 24 幀；sampler 搬去快閃後，省下的 RAM 又把它加回 32 幀。
 
-最後的用量（`./build.sh --release 1.2`）：
+最後的用量（`./build.sh --release 1.3`）：
 
 | | 用量 | 上限 |
 |---|---|---|
@@ -147,6 +147,15 @@
 - **不會誤丟編輯**：有未存的修改時轉 PRESET，第一下只提醒。
 - **矩陣的目的地顯示區段**：例如「F1 CUTOFF」、「O2 FRAME」。
 
+## 1.3：修正開機就當機（1.0–1.2 都有）
+
+1.0–1.2 在實機上開機後馬上當機，兩次後進入安全模式。
+
+- **原因**：主迴圈用 32 位元字複製音色交給聲音核心，但音色結構是 1290 bytes、只對齊 2 bytes，所以兩個交接格的第二格落在「除以 4 餘 2」的位址。FM-1 的處理器遇到未對齊的字存取就會出錯，而 PC 的 x86 處理器容許，所以模擬器從沒出事。
+- **修正**：音色結構用 `_Alignas(4)` 對齊，大小變成 1292，並加上編譯期檢查。TOYBOX-4 和 CHAIN-1 用同樣方式複製的結構也一起加上保證，它們原本只是剛好被擺在對齊的位址。
+- **防範**：`tools/host_ubsan.sh` 用 UBSan 跑三個韌體的全部模擬器測試，未對齊存取會直接中止。在修正前的程式上，它準確抓到 `core.c` 的這個寫入；修正後全部乾淨。
+- **舊存檔**：1.2 以前存的「編輯中的音色」設定讀不到，會改從出廠音色開始；使用者槽裡存的音色不受影響。
+
 ## 編譯與測試（2026-11-07）
 
 環境同 `../fm1-hello/README.md`。
@@ -156,8 +165,8 @@
 app/build/host/prism-1_host app/tests/basic.txt app/build/host    # 冒煙測試
 app/build/host/prism-1_host app/tests/sounds.txt app/build/host   # 24 個音色，錄成 sounds.wav
 app/build/host/prism-1_host app/tests/stress.txt app/build/host   # 最壞情況
-./build.sh --release 1.2 && ./build.sh --rfm1 --release 1.2
-node base/tests/rfm1_test.mjs app/build/prism-1-1.2.rfm1
+./build.sh --release 1.3 && ./build.sh --rfm1 --release 1.3
+node base/tests/rfm1_test.mjs app/build/prism-1-1.3.rfm1
 ```
 
 `basic.txt` 涵蓋：
