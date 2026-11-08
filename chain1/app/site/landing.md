@@ -1,6 +1,6 @@
 # CHAIN-1 {{VERSION}}
 
-一個單音合成器，訊號走固定的鏈：OSC → FILTER → EG → MOD → DELAY → REVERB，加上琶音器。
+最多 8 聲部的合成器，訊號走固定的鏈：OSC → FILTER → AMP → MOD → DELAY → REVERB，加上琶音器。OSC、MOD、DELAY、REVERB 也能放 NTS-1 的 logue SDK 單元（.ntkdigunit、.nts1mkiiunit），用 Android 的 FM-1 Tool 2.0 或 tools/fm1_units.py 傳進去。
 
 給 M-VAVE FM-1 的自製韌體，原始碼：<https://github.com/ghjob360-Tmp/Tmp/tree/claude/mwave-fm1-custom-firmware-01qpvb/chain1>
 
