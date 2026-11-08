@@ -59,7 +59,7 @@ typedef struct {
 } track_t;
 
 typedef struct {
-    track_t t[NTRK];
+    _Alignas(4) track_t t[NTRK];          /* (_Alignas: the whole project aligned: see below) */
     mod_t eq;                            /* p: low, mid, high, amount */
     mod_t mfx;                           /* the master FX: type, on, p[8] */
     mod_t mout;                          /* p: left, right, drive, release */
@@ -71,7 +71,9 @@ typedef struct {
     uint16_t sync;                       /* 0 free (speed leaves the tempo), 1 beat match (speed moves the tempo) */
     uint16_t detune;                     /* master detune, cents + 512 */
     uint16_t rsv;
-} proj_t;
+} proj_t;                                /* (aligned: core_project copies it by words; the FM-1's CPU faults on an
+                                           unaligned word, which x86 hosts never show) */
+_Static_assert(sizeof(proj_t) % 4u == 0u && _Alignof(proj_t) >= 4u, "proj_t is copied by words");
 
 /* ------------------------------------------------------------------ the tape --- */
 #define TAPE_BARS 128                    /* the tape: 128 bars of 4 beats */

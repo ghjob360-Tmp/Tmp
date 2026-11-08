@@ -159,11 +159,14 @@ typedef struct {
 
 #define NAME_LEN 16
 typedef struct {
-    uint16_t v[NPARAM];
+    _Alignas(4) uint16_t v[NPARAM];      /* (_Alignas: the whole patch aligned: see below) */
     mslot_t m[NSLOT];
     uint8_t lfo_y[8][LFO_PTS];           /* the drawn shapes */
     int8_t lfo_c[8][LFO_PTS];            /* each segment's curve, -100..100 */
     uint8_t fx_order[9];                 /* FXT_* in chain order */
     char name[NAME_LEN];
     uint8_t rsv[3];
-} patch_t;
+} patch_t;                              /* (aligned and a multiple of 4: core_patch copies it by words, and the
+                                           FM-1's CPU faults on an unaligned word: 1290 bytes put the second slot
+                                           at an odd half-word and the firmware crashed at its first patch) */
+_Static_assert(sizeof(patch_t) % 4u == 0u && _Alignof(patch_t) >= 4u, "patch_t is copied by words");

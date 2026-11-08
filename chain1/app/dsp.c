@@ -42,7 +42,7 @@ INL uint32_t rnd(void)
 }
 
 /* ------------------------------------------------------- main loop -> audio --- */
-_Static_assert(sizeof(patch_t) % 4u == 0u, "patch_t is copied by words");
+_Static_assert(sizeof(patch_t) % 4u == 0u && _Alignof(patch_t) >= 4u, "patch_t is copied by words");
 static patch_t slot[2];
 static volatile uint32_t slot_idx, slot_seq;
 static patch_t P;                                  /* the interrupt's copy */

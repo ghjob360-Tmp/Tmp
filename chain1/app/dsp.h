@@ -16,7 +16,8 @@ enum { ARP_UP, ARP_DOWN, ARP_UPDOWN, ARP_DOWNUP, ARP_CONV, ARP_DIV, ARP_CONVDIV,
 enum { CHORD_OCT, CHORD_MAJ, CHORD_SUS, CHORD_AUG, CHORD_MIN, CHORD_DIM, CHORD_N };
 
 typedef struct {
-    uint8_t osc_type, flt_type, eg_type, mod_type, dly_type, rev_type, arp_type, arp_chord;
+    _Alignas(4) uint8_t osc_type;        /* (_Alignas: the whole patch aligned: see below) */
+    uint8_t flt_type, eg_type, mod_type, dly_type, rev_type, arp_type, arp_chord;
     uint16_t shape, alt, lfo_rate, lfo_depth;              /* lfo_depth bipolar: < 512 pitch, > 512 shape */
     uint16_t cutoff, reso, sweep_rate, sweep_depth;        /* sweep_depth bipolar: < 512 down, > 512 up */
     uint16_t attack, release, trem_rate, trem_depth;
@@ -26,7 +27,8 @@ typedef struct {
     uint16_t arp_len, arp_tempo;                           /* arp_len 1..24, arp_tempo in 0.1 BPM 560..2400 */
     uint8_t arp_oct;                                       /* 1..3 */
     uint8_t rsv[3];
-} patch_t;
+} patch_t;                              /* (aligned: the render copies it by words; the FM-1's CPU faults on an
+                                           unaligned word, which x86 hosts never show) */
 
 void dsp_init(void);
 void dsp_patch(const patch_t *p);          /* main loop: the patch the next blocks play */
