@@ -1,0 +1,147 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Menus: a list of lines, the SELECT knob scrolls, GLO or HOME goes back. The manual (manual.c) is the first. Included by chipbox.c. */
+typedef struct { const char *text; uint8_t head; } mline_t;      /* head: a heading, in the chip's colour */
+#define MH(s) {s, 1}
+#define ML(s) {s, 0}
+#define MENU_ROWS 12                            /* 20 px a line */
+static const mline_t ADD_MENU[] = {                      /* the consoles, in the order of the chips in chips.c; a second list holds each one's channels */
+    MH("Add Channel"), ML("NES"), ML("Game Boy"), ML("Master System"), ML("PC Engine"), ML("Atari 2600"), ML("Konami VRC6"), ML("AY-3-8910"), ML("Mega Drive"), ML("Virtual Boy"), ML("Atari 8-bit"), ML("PC Speaker"), ML("AdLib"), ML("Namco WSG"), ML("Namco 163"), ML("Sunsoft 5B"), ML("NES MMC5"), ML("Famicom Disk"), ML("Konami SCC"), ML("MSX Music"), ML("Konami VRC7"), ML("Arcade FM"), ML("Sound Blaster"), ML("WonderSwan"), ML("Sam Coupe"), ML("VIC-20"), ML("Plus/4"), ML("Atari Lynx"), ML("PC-98"), ML("Neo Geo"), ML("Neo Geo Pocket"), ML("MSX-Audio"), ML("Yamaha TX81Z"), ML("SN76477"), ML("Namco System 1"), ML("Korg Poly-800"), ML("ZX Spectrum"), ML("NEC PC-88"), ML("Commodore 64"),
+};
+static const mline_t ADD_NES[] = {MH("NES"), ML("Pulse"), ML("Triangle"), ML("Noise"), ML("Drums")};
+static const mline_t ADD_GB[] = {MH("Game Boy"), ML("Pulse"), ML("Wave"), ML("Noise"), ML("Drums")};
+static const mline_t ADD_SMS[] = {MH("Master System"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_PCE[] = {MH("PC Engine"), ML("Wave"), ML("Noise"), ML("Drums")};
+static const mline_t ADD_TIA[] = {MH("Atari 2600"), ML("Sound"), ML("Drums")};
+static const mline_t ADD_VRC6[] = {MH("Konami VRC6"), ML("Pulse"), ML("Saw"), ML("Drums")};
+static const mline_t ADD_AY[] = {MH("AY-3-8910"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_MD[] = {MH("Mega Drive"), ML("FM"), ML("Drums")};
+static const mline_t ADD_VB[] = {MH("Virtual Boy"), ML("Wave"), ML("Noise"), ML("Drums")};
+static const mline_t ADD_POKEY[] = {MH("Atari 8-bit"), ML("Sound"), ML("Drums")};
+static const mline_t ADD_SPK[] = {MH("PC Speaker"), ML("Beeper"), ML("Drums")};
+static const mline_t ADD_OPL[] = {MH("AdLib"), ML("FM"), ML("Drums")};
+static const mline_t ADD_WSG[] = {MH("Namco WSG"), ML("Wave"), ML("Drums")};
+static const mline_t ADD_N163[] = {MH("Namco 163"), ML("Wave"), ML("Drums")};
+static const mline_t ADD_S5B[] = {MH("Sunsoft 5B"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_MMC5[] = {MH("NES MMC5"), ML("Pulse"), ML("Drums")};
+static const mline_t ADD_FDS[] = {MH("Famicom Disk"), ML("Wave"), ML("Drums")};
+static const mline_t ADD_SCC[] = {MH("Konami SCC"), ML("Wave"), ML("Drums")};
+static const mline_t ADD_OPLL[] = {MH("MSX Music"), ML("FM"), ML("Drums")};
+static const mline_t ADD_VRC7[] = {MH("Konami VRC7"), ML("FM"), ML("Drums")};
+static const mline_t ADD_OPM[] = {MH("Arcade FM"), ML("FM"), ML("Drums")};
+static const mline_t ADD_OPL3[] = {MH("Sound Blaster"), ML("FM"), ML("Drums")};
+static const mline_t ADD_WS[] = {MH("WonderSwan"), ML("Wave"), ML("Drums")};
+static const mline_t ADD_SAA[] = {MH("Sam Coupe"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_VIC[] = {MH("VIC-20"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_TED[] = {MH("Plus/4"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_LYNX[] = {MH("Atari Lynx"), ML("Sound"), ML("Drums")};
+static const mline_t ADD_PC98[] = {MH("PC-98"), ML("FM"), ML("SSG"), ML("Drums")};
+static const mline_t ADD_NEO[] = {MH("Neo Geo"), ML("FM"), ML("SSG"), ML("Drums")};
+static const mline_t ADD_NGP[] = {MH("Neo Geo Pocket"), ML("Tone"), ML("Drums")};
+static const mline_t ADD_OPL1[] = {MH("MSX-Audio"), ML("FM"), ML("Drums")};
+static const mline_t ADD_OPZ[] = {MH("Yamaha TX81Z"), ML("FM"), ML("Drums")};
+static const mline_t ADD_SN77[] = {MH("SN76477"), ML("Sound"), ML("Drums")};
+static const mline_t ADD_C30[] = {MH("Namco System 1"), ML("Wave"), ML("Drums")};
+static const mline_t ADD_MSM[] = {MH("Korg Poly-800"), ML("Organ"), ML("Drums")};
+static const mline_t ADD_ZX[] = {MH("ZX Spectrum"), ML("Beeper"), ML("Drums")};
+static const mline_t ADD_OPN[] = {MH("NEC PC-88"), ML("FM"), ML("SSG"), ML("Drums")};
+static const mline_t ADD_SID[] = {MH("Commodore 64"), ML("Voice"), ML("Drums")};
+static const struct { const mline_t *l; uint8_t n, kind[4]; } ADD_SUB[CHIPS] = {
+    {ADD_NES, 5, {KD_NES_PU, KD_NES_TRI, KD_NES_NOI, KD_DRUM0}}, {ADD_GB, 5, {KD_GB_PU, KD_GB_WAV, KD_GB_NOI, KD_DRUM0 + 1}}, {ADD_SMS, 3, {KD_SMS, KD_DRUM0 + 2, 0}},
+    {ADD_PCE, 4, {KD_PCE, KD_PCE_NOI, KD_DRUM0 + 3, 0}}, {ADD_TIA, 3, {KD_TIA, KD_DRUM0 + 4, 0}}, {ADD_VRC6, 4, {KD_VRC6_PU, KD_VRC6_SAW, KD_DRUM0 + 5}},
+    {ADD_AY, 3, {KD_AY, KD_DRUM0 + 6, 0}}, {ADD_MD, 3, {KD_MD, KD_DRUM0 + 7, 0}}, {ADD_VB, 4, {KD_VB_WAV, KD_VB_NOI, KD_DRUM0 + 8, 0}},
+    {ADD_POKEY, 3, {KD_POKEY, KD_DRUMB, 0}}, {ADD_SPK, 3, {KD_SPK, KD_DRUMB + 1, 0}}, {ADD_OPL, 3, {KD_OPL, KD_DRUMB + 2, 0}},
+    {ADD_WSG, 3, {KD_WSG, KD_DRUMB + 3, 0}}, {ADD_N163, 3, {KD_N163, KD_DRUMB + 4, 0}}, {ADD_S5B, 3, {KD_S5B, KD_DRUMB + 5, 0}},
+    {ADD_MMC5, 3, {KD_MMC5, KD_DRUMC, 0}}, {ADD_FDS, 3, {KD_FDS, KD_DRUMC + 1, 0}}, {ADD_SCC, 3, {KD_SCC, KD_DRUMC + 2, 0}}, {ADD_OPLL, 3, {KD_OPLL, KD_DRUMC + 3, 0}},
+    {ADD_VRC7, 3, {KD_VRC7, KD_DRUMD, 0}}, {ADD_OPM, 3, {KD_OPM, KD_DRUMD + 1, 0}}, {ADD_OPL3, 3, {KD_OPL3, KD_DRUMD + 2, 0}}, {ADD_WS, 3, {KD_WS, KD_DRUMD + 3, 0}},
+    {ADD_SAA, 3, {KD_SAA, KD_DRUME, 0}}, {ADD_VIC, 3, {KD_VIC, KD_DRUME + 1, 0}}, {ADD_TED, 3, {KD_TED, KD_DRUME + 2, 0}}, {ADD_LYNX, 3, {KD_LYNX, KD_DRUME + 3, 0}},
+    {ADD_PC98, 4, {KD_PC98_FM, KD_PC98_SSG, KD_DRUMF}}, {ADD_NEO, 4, {KD_NEO_FM, KD_NEO_SSG, KD_DRUMF + 1}}, {ADD_NGP, 3, {KD_NGP, KD_DRUMF + 2, 0}}, {ADD_OPL1, 3, {KD_OPL1, KD_DRUMF + 3, 0}},
+    {ADD_OPZ, 3, {KD_OPZ, KD_DRUMF + 4, 0}}, {ADD_SN77, 3, {KD_SN77, KD_DRUMF + 5, 0}}, {ADD_C30, 3, {KD_C30, KD_DRUMF + 6, 0}},
+    {ADD_MSM, 3, {KD_MSM, KD_DRUMG, 0}}, {ADD_ZX, 3, {KD_ZX, KD_DRUMG + 1, 0}}, {ADD_OPN, 4, {KD_OPN_FM, KD_OPN_SSG, KD_DRUMH}}, {ADD_SID, 3, {KD_SID, KD_DRUMI, 0}},
+};
+static uint32_t add_console;
+
+static const mline_t CONF_FACTORY[] = {MH("Factory Reset?"), ML("OCT+ Yes"), ML("OCT- No")};
+static const mline_t COPY_MENU[] = {MH("Copy Channel"), ML("Patch Only"), ML("Patch And Notes"), ML("Cancel")};
+enum { MK_MANUAL, MK_ADD, MK_ADD2, MK_MENU, MK_FACTORY, MK_COPY, MK_BT };
+static uint32_t menu_kind;                       /* what the open list is: help, the add-channel list, the menu, a confirm */
+static const mline_t *menu_lines;
+static uint32_t menu_n, menu_top, menu_on, menu_dirty, menu_pick, menu_sel;     /* menu_pick: a list you choose from (SELECT moves the bar, OCT+ yes) */
+
+#define QS_OK 0xA0u                              /* set.demo (unused before): the top nibble says the low bits are ours */
+#define QS_ALWAYS 1u                             /* quick start at every start */
+#define QS_PICK 2u                               /* the project browser at every start */
+#define QS_NOTIPS 4u                             /* tips off (a new device has them on) */
+#define QS_INSTALLED 8u                          /* an install started from here: the next boot of Chipbox is a fresh one (if there are no projects) */
+static mline_t SYSM[8] = {MH("Menu"), ML(""), ML(""), ML(""), ML(""), ML(""), ML(""), ML("Factory Reset")};
+static mline_t BTM[8] = {MH("Brothers Link"), ML(""), ML(""), ML(""), ML(""), ML(""), ML(""), ML("Demo: Load")};            /* the Bluetooth page: Sync, Status, Sidechain, Patterns, Punch-in FX, Key */
+static void bt_texts(void)
+{
+    static const char *const MODE[3] = {"Sync: Off", "Sync: Lead", "Sync: Follow"};
+    static const char *const STAT[3][3] = {{"Status: Off", "Status: Off", "Status: Off"}, {"Status: Ready", "Status: Ready", "Status: Leading"}, {"Status: Searching", "Status: Linked", "Status: In sync"}};
+    BTM[1].text = MODE[brothers_mode % 3u]; BTM[2].text = STAT[brothers_mode % 3u][brothers_link() % 3u];
+    BTM[3].text = bt_side ? "Sidechain: On" : "Sidechain: Off"; BTM[4].text = bt_patsync ? "Patterns: On" : "Patterns: Off";
+    BTM[5].text = bt_fxsync ? "Punch-in FX: On" : "Punch-in FX: Off"; BTM[6].text = bt_key ? "Key: On" : "Key: Off";
+}       /* GLO + HOME */
+static void menu_open(const mline_t *l, uint32_t n) { menu_lines = l; menu_n = n; menu_top = 0; menu_on = 1; menu_dirty = 1; menu_pick = 0; }
+static void menu_open_pick(const mline_t *l, uint32_t n) { menu_open(l, n); menu_pick = 1; menu_sel = 1; }
+static void bt_open(uint32_t at) { bt_texts(); menu_open_pick(BTM, 8); menu_sel = at; menu_kind = MK_BT; }
+static void sys_open(uint32_t fl, uint32_t at)
+{
+    SYSM[1].text = fl & QS_ALWAYS ? "Quick Start Always: Yes" : "Quick Start Always: No";
+    SYSM[2].text = fl & QS_PICK ? "Projects At Start: Yes" : "Projects At Start: No";
+    SYSM[3].text = fl & QS_NOTIPS ? "Show Tips: No" : "Show Tips: Yes";
+    SYSM[4].text = clk_mode == 1u ? "MIDI Clock: Send" : clk_mode == 2u ? "MIDI Clock: Follow" : "MIDI Clock: Off";
+    SYSM[5].text = "Brothers Link";
+    if (proj_demos_free_empty() + proj_demos_free_used()) {                       /* a demo was deleted: the Restore Demos row shows (it is hidden otherwise), Factory Reset is the last row */
+        SYSM[6].text = proj_demos_free_empty() ? "Restore Demos" : "Restore Demos: Slot In Use";
+        SYSM[7].text = "Factory Reset";
+        menu_open_pick(SYSM, 8);
+    } else {
+        SYSM[6].text = "Factory Reset";
+        menu_open_pick(SYSM, 7);
+    }
+    menu_sel = at;
+}
+static void menu_scroll(int32_t d)
+{
+    if (menu_pick) {                            /* the bar moves over the lines that are not headings */
+        uint32_t v = menu_sel;
+        while (d < 0 ? v > 0u : v + 1u < menu_n) { v = d < 0 ? v - 1u : v + 1u; if (!menu_lines[v].head) break; }          /* no wrap */
+        if (menu_lines[v].head) v = menu_sel;
+        menu_sel = v; menu_dirty = 1;
+        if (v < menu_top + 1u) menu_top = v > 1u ? v : 0u;                                  /* the list follows the bar (the heading shows at the top) */
+        else if (v >= menu_top + MENU_ROWS) menu_top = v + 1u - MENU_ROWS;
+        return;
+    }
+    uint32_t max = menu_n > MENU_ROWS ? menu_n - MENU_ROWS : 0u, top = menu_top;
+    if (d > 0 && top < max) top++;
+    if (d < 0 && top > 0u) top--;
+    if (top != menu_top) { menu_top = top; menu_dirty = 1; }
+}
+static void add_draw(uint16_t accent);
+static void man_draw(void);
+static void menu_win(void)                      /* a pick list as a window: the heading is the title, the bar is the choice, the confirm button at the bottom */
+{
+    const int32_t big = menu_kind == MK_BT || (menu_kind == MK_MENU && menu_n > 7u), w = 232, h = big ? 200 : menu_kind == MK_MENU ? 190 : 156, x = 4, y0 = big ? 34 : menu_kind == MK_MENU ? 38 : 42;      /* the Brothers Link page and the menu with the Restore Demos row have the most lines */
+    const uint16_t col = menu_kind == MK_FACTORY ? RGB(235, 64, 52) : M_ACC;
+    const char *hint = menu_kind == MK_ADD2 ? (chg_ch < chan_n ? "OCT+  Change" : "OCT+  Add") : menu_pick ? "OCT+  Select" : 0;
+    uint32_t b, i;
+    win_shadow(x, y0, w, h);
+    for (b = 0; b * 80u < (uint32_t)h; b++) {
+        win_band(b, w, h);
+        win_chrome(w, h, menu_lines[0].text, col);
+        for (i = 1; i < menu_n && i < (menu_kind == MK_BT || menu_kind == MK_MENU ? 8u : 5u); i++) {
+            int32_t pitch = menu_kind == MK_MENU || menu_kind == MK_BT ? 21 : 24, y = 29 + ((int32_t)i - 1) * pitch;
+            if (menu_pick && i == menu_sel) { mR(4, y - 3, w - 8, pitch - 2, R_SEL); mR(4, y - 3, 3, pitch - 2, col); }
+            mT(14, y, menu_lines[i].text, menu_pick && i == menu_sel ? R_WHITE : RGB(200, 200, 210));
+        }
+        win_foot(w, h, hint);
+        cv_blit(x, y0 + b * 80u);
+    }
+}
+static void menu_draw(uint16_t accent)
+{
+    if (menu_kind == MK_MANUAL) { man_draw(); return; }             /* the manual is drawn by manual.c */
+    if (menu_kind == MK_ADD) { add_draw(accent); return; }          /* the Add Channel list is drawn by addmenu.c */
+    menu_win();
+}

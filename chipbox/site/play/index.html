@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play online · Chipbox</title>
+<meta name="description" content="Play Chipbox, the chiptune groovebox for the delightful FM-1">
+<style>
+  :root { --bg:#0e0e12; --panel:#181820; --deep:#101016; --ink:#e8e8ee; --dim:#8a8a9a; --red:#eb4034; --green:#a8cd1c; --blue:#46aaff; --line:#2a2a36; color-scheme:dark; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  main { max-width:1040px; margin:0 auto; padding:32px 16px 72px; }
+  header { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 20px; margin:0 0 20px; }
+  h1 { font-size:44px; margin:0; letter-spacing:.02em; line-height:1.1; }
+  h1 a { color:inherit; text-decoration:none; }
+  .tag { display:inline-block; padding:2px 10px; background:var(--red); color:#fff; font-size:13px; letter-spacing:.12em; vertical-align:middle; margin-left:10px; }
+  header p { margin:0; color:var(--dim); }
+  header nav { margin-left:auto; display:flex; gap:16px; }
+  a { color:var(--blue); }
+  .devicebox { overflow-x:auto; overscroll-behavior-x:contain; }
+  .device { position:relative; width:100%; min-width:560px; aspect-ratio:1040/664; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:manipulation; }
+  .device svg { position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  .device canvas { position:absolute; left:calc((361 - 30) / 1040 * 100%); top:calc((145 - 82) / 664 * 100%); width:calc(208 / 1040 * 100%); height:calc(208 / 664 * 100%); image-rendering:pixelated; background:#000; pointer-events:none; }
+  .body { fill:var(--panel); stroke:#3a3a4a; stroke-width:4; }
+  .bezel { fill:#0a0a0e; }
+  .tray { fill:var(--deep); }
+  .ctl { cursor:pointer; }
+  .ctl.knob { cursor:ns-resize; }
+  .btnface { fill:#23232e; stroke:#3a3a4a; stroke-width:2; transition:fill .06s; }
+  .lit .btnface { fill:var(--red); stroke:var(--red); }
+  .lit text.btn { fill:#fff; }
+  .held .btnface, .held .keyface { stroke:var(--blue); stroke-width:3; }
+  .keyface.white { fill:#4a4a5a; }
+  .keyface.black { fill:#3a3a48; }
+  .keyface { transition:fill .06s; }
+  .lit .keyface.white { fill:var(--red); }
+  .lit .keyface.black { fill:#b8322a; }
+  .dim .keyface.white { fill:#6a4044; }
+  .dim .keyface.black { fill:#52343a; }
+  .knobface { fill:var(--bg); stroke:#3a3a4a; stroke-width:4; }
+  .notch { stroke:var(--ink); stroke-width:5; stroke-linecap:round; }
+  text { font-family:ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight:700; text-anchor:middle; }
+  text.lab { fill:var(--dim); font-size:14px; letter-spacing:.1em; }
+  text.btn { fill:#b8b8c8; font-size:13px; letter-spacing:.04em; }
+  .start { position:absolute; inset:0; display:grid; place-items:center; background:rgba(14,14,18,.6); border-radius:4.4% / 6.9%; }
+  .start button { display:inline-block; padding:12px 24px; background:var(--ink); color:var(--bg); border:0; font:700 16px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing:.06em; cursor:pointer; }
+  .start[hidden] { display:none; }
+  .turn { display:none; margin:0 0 12px; color:var(--dim); font-size:14px; }
+  @media (orientation: portrait) and (max-width: 700px) { .turn { display:block; } h1 { font-size:34px; } }
+  .bar { display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center; margin:16px 0 0; color:var(--dim); font-size:14px; }
+  .bar button { font:inherit; color:var(--ink); background:transparent; border:0; box-shadow:inset 0 0 0 2px var(--dim); padding:6px 14px; cursor:pointer; }
+  .bar button[aria-pressed="true"] { background:var(--ink); color:var(--bg); box-shadow:none; }
+  .help { margin:24px 0 0; color:var(--dim); font-size:14px; max-width:70ch; }
+  kbd { font:inherit; background:var(--panel); padding:1px 6px; color:var(--ink); }
+  footer { margin-top:56px; color:var(--dim); font-size:14px; }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce) { .btnface, .keyface { transition:none; } }
+</style>
+<link rel="stylesheet" href="../css/gb.css">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+</head>
+<body>
+<main>
+<header>
+  <h1><a href="../">Chipbox</a><span class="tag">PLAY ONLINE</span></h1>
+</header>
+  <nav class="gbnav" aria-label="Pages"><a class="hot" href="../install.html">Install</a><a href="../play/" aria-current="page">Play online</a><a href="../manual/">Tutorials</a><a href="../guide/">Manual</a><a href="../projects/">Projects</a><a href="../cheatsheet/">Cheat sheet</a><a href="https://github.com/pbarilla/chipbox/releases/latest">Download</a><a href="https://github.com/pbarilla/chipbox">Source</a></nav>
+
+
+
+<div class="devicebox">
+  <div class="device" id="device">
+    <svg id="panel" viewBox="30 82 1040 664" aria-label="The FM-1"></svg>
+    <canvas id="lcd" width="240" height="240" aria-label="The FM-1's screen"></canvas>
+    <div class="start" id="start"><button id="go" type="button">Switch on</button></div>
+  </div>
+</div>
+<div class="bar">
+  <button id="mute" type="button" aria-pressed="false">Mute</button>
+  <span id="midi"></span>
+  <button id="reset" type="button" title="Whoopsie daisy!">Factory reset</button>
+</div>
+
+</main>
+<script src="chipbox.js"></script>
+<script>
+(function () {
+  "use strict";
+  var KEY = "chipbox-flash-1", NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  var mod = null, ctx = null, held = 0, master = 0.8, muted = false;
+  var svg = $("panel"), btnEl = [], keyEl = [], knobEl = [], angle = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, m: 0 };
+
+  function mk(tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; }
+  function txt(x, y, s, cls, parent) { var e = mk("text", { x: x, y: y, "class": cls }, parent); e.textContent = s; return e; }
+
+  /* the panel, drawn in the screenshot's own units */
+  mk("rect", { x: 32.5, y: 84.5, width: 1035, height: 659, rx: 46, "class": "body" });
+  mk("rect", { x: 342, y: 127, width: 246, height: 246, rx: 6, "class": "bezel" });
+  mk("rect", { x: 90, y: 349, width: 218, height: 59, rx: 10, "class": "tray" });
+  mk("rect", { x: 621, y: 247, width: 416, height: 146, rx: 14, "class": "tray" });
+  mk("rect", { x: 67, y: 435, width: 966, height: 280, rx: 14, "class": "tray" });
+
+  /* knobs: wheel or drag. the encoders: SELECT 0, ALGORITHM 1, KNOB1-4 2-5, PRESETS 6; MASTER is the page's own volume */
+  var KNOBS = [["MASTER", "m", 139, 187], ["SELECT", 0, 253, 185], ["PRESETS", 6, 139, 295], ["ALGORITHM", 1, 253, 295],
+               ["KNOB1", 2, 665, 185], ["KNOB2", 3, 772, 185], ["KNOB3", 4, 880, 185], ["KNOB4", 5, 988, 185]];
+  KNOBS.forEach(function (k) {
+    var g = mk("g", { "class": "ctl knob" }), id = k[1];
+    txt(k[2], k[3] - 41, k[0], "lab", g);
+    mk("circle", { cx: k[2], cy: k[3], r: 29, "class": "knobface" }, g);
+    var n = mk("line", { x1: k[2], y1: k[3] - 6, x2: k[2], y2: k[3] - 22, "class": "notch" }, g);
+    mk("circle", { cx: k[2], cy: k[3], r: 44, fill: "transparent" }, g);
+    function show() { n.setAttribute("transform", "rotate(" + angle[id] + " " + k[2] + " " + k[3] + ")"); }
+    function turn(d) {
+      if (id === "m") { master = Math.max(0, Math.min(1.2, master + d * 0.05)); angle.m = (master / 1.2) * 270 - 135; }
+      else { angle[id] += d * 18; if (mod) mod._web_enc(id, d); wake(); }
+      show();
+    }
+    if (id === "m") { angle.m = (master / 1.2) * 270 - 135; show(); }
+    var y0 = null, acc = 0;
+    g.addEventListener("wheel", function (e) { e.preventDefault(); acc += e.deltaY; while (acc >= 30) { turn(-1); acc -= 30; } while (acc <= -30) { turn(1); acc += 30; } }, { passive: false });
+    g.addEventListener("pointerdown", function (e) { g.setPointerCapture(e.pointerId); y0 = e.clientY; e.preventDefault(); });
+    g.addEventListener("pointermove", function (e) { if (y0 === null) return; var d = Math.trunc((y0 - e.clientY) / 9); if (d) { turn(d); y0 = e.clientY; } });
+    g.addEventListener("pointerup", function () { y0 = null; }); g.addEventListener("pointercancel", function () { y0 = null; });
+    knobEl[id] = turn;
+  });
+
+  /* buttons. ids: OCT- 0, OCT+ 1, FX 2, SEL 3, ENV 4, LFO 5, EDIT 6, GLO 7, HOME 8, SAVE 9, ARP 10, SEQ 11, PLAY 12, REC 13 */
+  var BTNS = [["OCT-", 0, 147, 380], ["OCT+", 1, 249, 380],
+              ["FX", 2, 663, 287], ["SEL", 3, 729, 287], ["ENV", 4, 794, 287], ["LFO", 5, 860, 287], ["EDIT", 6, 925, 287], ["GLO", 7, 990, 287],
+              ["HOME", 8, 663, 352], ["SAVE", 9, 729, 352], ["ARP", 10, 794, 352], ["SEQ", 11, 860, 352], ["PLAY|STOP", 12, 925, 352], ["REC", 13, 990, 352]];
+  BTNS.forEach(function (b) {
+    var g = mk("g", { "class": "ctl" }), w = b[1] < 2 ? 84 : 58, h = 42;
+    mk("rect", { x: b[2] - w / 2, y: b[3] - h / 2, width: w, height: h, rx: 9, "class": "btnface" }, g);
+    var parts = b[0].split("|");
+    if (parts.length > 1) { txt(b[2], b[3] - 4, parts[0], "btn", g).setAttribute("style", "font-size:12px"); txt(b[2], b[3] + 11, parts[1], "btn", g).setAttribute("style", "font-size:12px"); }
+    else txt(b[2], b[3] + 5, b[0], "btn", g);
+    function press(on) { g.classList.toggle("held", !!on); if (mod) mod._web_button(b[1], on ? 1 : 0); }
+    g.addEventListener("pointerdown", function (e) { g.setPointerCapture(e.pointerId); press(1); wake(); e.preventDefault(); });
+    g.addEventListener("pointerup", function () { press(0); }); g.addEventListener("pointercancel", function () { press(0); });
+    g._press = press; btnEl[b[1]] = g;
+  });
+
+  /* keys: 16 white, 11 black; key k is a note, F3 = 0 up to G5 = 26 */
+  function isBlack(k) { return [1, 3, 6, 8, 10].indexOf((5 + k) % 12) >= 0; }
+  var wi = 0;
+  for (var k = 0; k < 27; k++) {
+    var blk = isBlack(k), cx, g2 = mk("g", { "class": "ctl" });
+    if (!blk) { cx = 109 + wi * 58.7; wi++; mk("rect", { x: cx - 23, y: 553, width: 46, height: 148, rx: 23, "class": "keyface white" }, g2); }
+    else { cx = 109 + (wi - 0.5) * 58.7; mk("rect", { x: cx - 23, y: 452, width: 46, height: 94, rx: 23, "class": "keyface black" }, g2); }
+    g2.dataset.k = k; keyEl.push(g2);
+  }
+  function setKey(k, on) { if (on) held |= 1 << k; else held &= ~(1 << k); keyEl[k].classList.toggle("held", !!on); if (mod) mod._web_keys(held >>> 0); }
+  var ptr = {};
+  svg.addEventListener("pointerdown", function (e) {
+    var t = e.target.closest && e.target.closest("g.ctl"); if (!t || t.dataset.k === undefined) return;
+    ptr[e.pointerId] = +t.dataset.k; setKey(+t.dataset.k, 1); wake(); svg.setPointerCapture && svg.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  svg.addEventListener("pointermove", function (e) {
+    if (!(e.pointerId in ptr)) return;
+    var t = document.elementFromPoint(e.clientX, e.clientY); t = t && t.closest && t.closest("g.ctl");
+    if (t && t.dataset.k !== undefined && +t.dataset.k !== ptr[e.pointerId]) { setKey(ptr[e.pointerId], 0); ptr[e.pointerId] = +t.dataset.k; setKey(ptr[e.pointerId], 1); }
+  });
+  function up(e) { if (e.pointerId in ptr) { setKey(ptr[e.pointerId], 0); delete ptr[e.pointerId]; } }
+  svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+
+  /* the computer keyboard */
+  var NOTE = {}; "zxcvbnm,./".split("").forEach(function (c, i) { NOTE[c] = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16][i]; });
+  "qwerty".split("").forEach(function (c, i) { NOTE[c] = [18, 19, 21, 23, 24, 26][i]; });
+  var SH = { s: 1, d: 3, f: 5, g: 8, h: 10, l: 13, ";": 15, "2": 17, "3": 20, "4": 22, "6": 25 };
+  for (var s in SH) NOTE[s] = SH[s];
+  var CTRL = { " ": 12, "Enter": 8, "`": 13, "[": 0, "]": 1, "\\": 2, "Tab": 7, "1": 10, "5": 6, "9": 9 };
+  addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var c = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (c in NOTE) { if (!e.repeat) setKey(NOTE[c], 1); wake(); e.preventDefault(); return; }
+    if (c in CTRL) { if (!e.repeat) btnEl[CTRL[c]]._press(1); wake(); e.preventDefault(); return; }
+    if (e.key === "ArrowLeft") knobEl[0](-1); else if (e.key === "ArrowRight") knobEl[0](1);
+    else if (e.key === "ArrowUp") knobEl[6](1); else if (e.key === "ArrowDown") knobEl[6](-1);
+    else if (e.key === "PageUp") knobEl[1](1); else if (e.key === "PageDown") knobEl[1](-1); else return;
+    e.preventDefault();
+  });
+  addEventListener("keyup", function (e) {
+    var c = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (c in NOTE) setKey(NOTE[c], 0); else if (c in CTRL) btnEl[CTRL[c]]._press(0);
+  });
+  addEventListener("blur", function () { for (var k = 0; k < 27; k++) if (held >> k & 1) setKey(k, 0); for (var b = 0; b < 14; b++) btnEl[b]._press(0); });
+
+  /* the screen and the lights */
+  var lcd = $("lcd"), g = lcd.getContext("2d"), img = g.createImageData(240, 240), px = new Uint32Array(img.data.buffer);
+  function frame() {
+    if (mod) {
+      var fb = mod._web_fb() >> 1, h = mod.HEAPU16, i;
+      for (i = 0; i < 57600; i++) {
+        var c = h[fb + i], r = (c >> 11) * 255 / 31 | 0, gr = (c >> 5 & 63) * 255 / 63 | 0, b = (c & 31) * 255 / 31 | 0;
+        px[i] = 0xff000000 | b << 16 | gr << 8 | r;
+      }
+      g.putImageData(img, 0, 0);
+      var lp = mod._web_leds(), L = mod.HEAPU8, id;
+      for (id = 0; id < 14; id++) btnEl[id].classList.toggle("lit", L[lp + id] === 2);
+      for (var k = 0; k < 27; k++) { var v = L[lp + 14 + k]; keyEl[k].classList.toggle("lit", v === 2); keyEl[k].classList.toggle("dim", v === 1); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  /* the sound: the firmware renders 44.1 kHz blocks when the browser asks for audio */
+  function pull() {
+    var p = mod._web_audio() >> 2, h = mod.HEAP32, out = new Float32Array(512), i;
+    for (i = 0; i < 512; i++) { var v = h[p + i]; out[i] = (v > 32767 ? 32767 : v < -32767 ? -32767 : v) / 32768; }
+    return out;
+  }
+  function startAudio() {
+    if (ctx) { if (ctx.state !== "running") ctx.resume(); return; }
+    var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    ctx = new AC();
+    var node = ctx.createScriptProcessor(2048, 0, 2), step = 44100 / ctx.sampleRate, src = new Float32Array(0), pos = 0;
+    node.onaudioprocess = function (e) {
+      var L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), n = L.length, i, vol = muted ? 0 : master;
+      if (!mod) { L.fill(0); R.fill(0); return; }
+      var need = Math.ceil(pos + n * step) + 2;
+      while (src.length / 2 < need) { var blk = pull(), nb = new Float32Array(src.length + blk.length); nb.set(src); nb.set(blk, src.length); src = nb; }
+      for (i = 0; i < n; i++) {
+        var j = Math.floor(pos), f = pos - j;
+        L[i] = (src[2 * j] * (1 - f) + src[2 * j + 2] * f) * vol;
+        R[i] = (src[2 * j + 1] * (1 - f) + src[2 * j + 3] * f) * vol;
+        pos += step;
+      }
+      var keep = Math.floor(pos); src = src.subarray(2 * keep); pos -= keep;
+    };
+    node.connect(ctx.destination);
+  }
+  function wake() { if (ctx && ctx.state === "suspended") ctx.resume(); }
+  $("go").addEventListener("click", function () { startAudio(); $("start").hidden = true; });
+  $("mute").addEventListener("click", function () { muted = !muted; this.setAttribute("aria-pressed", muted); });
+
+  /* what you made stays in the browser */
+  function save() {
+    if (!mod) return;
+    try {
+      var f = new Uint8Array(mod.HEAPU8.buffer, mod._web_flash(), mod._web_flash_len()), s = new Uint8Array(mod.HEAPU8.buffer, mod._web_store(), mod._web_store_len()), t = "", i;
+      for (i = 0; i < f.length; i += 4096) t += String.fromCharCode.apply(null, f.subarray(i, i + 4096));
+      var t2 = ""; for (i = 0; i < s.length; i++) t2 += String.fromCharCode(s[i]);
+      localStorage.setItem(KEY, JSON.stringify({ f: btoa(t), s: btoa(t2) }));
+    } catch (e) {}
+  }
+  function restore() {
+    try {
+      var d = JSON.parse(localStorage.getItem(KEY) || "null"); if (!d) return;
+      var f = atob(d.f), s = atob(d.s), H = mod.HEAPU8, fp = mod._web_flash(), sp = mod._web_store(), i;
+      if (f.length !== mod._web_flash_len() || s.length !== mod._web_store_len()) return;
+      for (i = 0; i < f.length; i++) H[fp + i] = f.charCodeAt(i);
+      for (i = 0; i < s.length; i++) H[sp + i] = s.charCodeAt(i);
+    } catch (e) {}
+  }
+  $("reset").addEventListener("click", function () { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); });
+
+  /* a MIDI keyboard, if there is one */
+  if (navigator.requestMIDIAccess) navigator.requestMIDIAccess().then(function (m) {
+    function hook() {
+      var n = 0;
+      m.inputs.forEach(function (inp) { n++; inp.onmidimessage = function (ev) { if (mod && ev.data.length === 3) mod._web_midi(ev.data[0], ev.data[1], ev.data[2]); wake(); }; });
+      $("midi").textContent = n ? "MIDI OK" : "";
+    }
+    hook(); m.onstatechange = hook;
+  }).catch(function () {});
+
+  Chipbox().then(function (m) {
+    mod = m; restore(); m._web_start();
+    var gen = m._web_flash_gen();
+    setInterval(function () { var n = m._web_flash_gen(); if (n !== gen) { gen = n; save(); } }, 1500);
+    requestAnimationFrame(frame);
+  });
+})();
+</script>
+</body>
+</html>

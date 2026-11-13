@@ -1,0 +1,126 @@
+# manual: the later tutorial steps (fresh flash)
+1000 held 0x100
+1900 held 0
+2200 enc 0 1
+2300 enc 0 1
+2400 enc 0 1
+2500 enc 0 1
+2900 held 0x100
+2960 held 0
+3700 btn 1
+4000 btn 1
+4300 btn 1
+5100 enc 6 1
+5300 btn 1
+5600 btn 1
+5900 enc 0 1
+6030 btn 1
+6730 enc 6 1
+6930 btn 1
+7230 enc 0 1
+7360 btn 1
+7660 btn 1
+8360 enc 6 1
+8560 btn 1
+8860 enc 0 1
+8990 enc 0 1
+9120 btn 1
+9420 btn 1
+10620 shot
+10920 enc 2 24
+11170 shot
+12370 shot
+12470 held 0x100
+12530 held 0
+12770 held 0x100
+12830 held 0
+13270 btn 1
+13420 btn 1
+13570 btn 1
+13720 btn 1
+13870 btn 1
+14020 btn 1
+14870 shot
+14970 held 0x100
+15030 held 0
+15570 enc 6 1
+15820 enc 6 1
+16070 enc 6 1
+16370 btn 0
+16520 btn 0
+17620 shot
+17720 btn 11
+18920 enc 1 1
+19420 shot
+19520 enc 1 -1
+20020 keys 0x800
+20120 keys 0
+20270 enc 0 1
+20470 keys 0x800
+20570 keys 0
+20720 enc 0 1
+20920 keys 0x800
+21020 keys 0
+21170 enc 0 1
+21370 keys 0x800
+21470 keys 0
+21620 enc 0 1
+21820 keys 0x800
+21920 keys 0
+22070 enc 0 1
+22270 keys 0x800
+22370 keys 0
+22520 enc 0 1
+22720 keys 0x800
+22820 keys 0
+22970 enc 0 1
+23170 keys 0x800
+23270 keys 0
+23420 shot
+23620 btn 11
+24320 enc 6 1
+24620 btn 1
+24770 btn 1
+25870 btn 11
+26970 enc 0 1
+27120 enc 0 1
+27420 keys 0x40
+27520 keys 0
+27670 enc 0 1
+27800 enc 0 1
+27930 enc 0 1
+28160 keys 0x800
+28260 keys 0
+28410 enc 0 1
+28540 enc 0 1
+28670 enc 0 1
+28900 keys 0x40
+29000 keys 0
+29150 enc 0 1
+29280 enc 0 1
+29410 enc 0 1
+29640 keys 0x800
+29740 keys 0
+29890 shot
+30090 btn 11
+30790 enc 6 1
+31090 held 0x100
+31150 held 0
+32390 shot
+32490 enc 3 -1
+32610 enc 3 -1
+32730 enc 3 -1
+33350 shot
+33450 held 0x100
+33510 held 0
+34750 shot
+34850 btn 1
+35750 enc 6 -1
+35950 enc 6 -1
+36150 enc 6 -1
+36350 enc 6 -1
+37050 shot
+37250 btn 12
+38750 shot
+38950 btn 12
+39450 end

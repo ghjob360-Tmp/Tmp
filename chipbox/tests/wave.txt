@@ -1,0 +1,23 @@
+# the wave page of a Game Boy wave channel (added to Tetris): SHAPE, FOLD, STEP, TWIST
+100 enc 6 -1
+200 btn 1
+300 enc 0 1
+400 btn 1
+450 enc 0 1
+500 btn 1
+1700 held 0x100
+1750 held 0
+2300 enc 1 1
+2360 enc 1 1
+2420 enc 1 1
+2800 enc 2 -5
+2830 enc 2 -5
+3000 enc 3 4
+3030 enc 3 4
+3060 enc 3 4
+3090 enc 3 4
+3300 enc 4 3
+3330 enc 4 3
+3360 enc 4 3
+3700 shot
+4200 end

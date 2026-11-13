@@ -1,0 +1,126 @@
+[
+ {
+  "name": "NES",
+  "file": "samples/nes.chipbox"
+ },
+ {
+  "name": "Game Boy",
+  "file": "samples/game-boy.chipbox"
+ },
+ {
+  "name": "Master System",
+  "file": "samples/master-system.chipbox"
+ },
+ {
+  "name": "PC Engine",
+  "file": "samples/pc-engine.chipbox"
+ },
+ {
+  "name": "Atari 2600",
+  "file": "samples/atari-2600.chipbox"
+ },
+ {
+  "name": "Konami VRC6",
+  "file": "samples/konami-vrc6.chipbox"
+ },
+ {
+  "name": "AY-3-8910",
+  "file": "samples/ay-3-8910.chipbox"
+ },
+ {
+  "name": "Mega Drive",
+  "file": "samples/mega-drive.chipbox"
+ },
+ {
+  "name": "Virtual Boy",
+  "file": "samples/virtual-boy.chipbox"
+ },
+ {
+  "name": "Atari 8-bit",
+  "file": "samples/atari-8-bit.chipbox"
+ },
+ {
+  "name": "PC Speaker",
+  "file": "samples/pc-speaker-ode.chipbox"
+ },
+ {
+  "name": "AdLib",
+  "file": "samples/adlib-dungeon.chipbox"
+ },
+ {
+  "name": "Namco WSG",
+  "file": "samples/namco-wsg-chase.chipbox"
+ },
+ {
+  "name": "Namco 163",
+  "file": "samples/namco-163-wall.chipbox"
+ },
+ {
+  "name": "Sunsoft 5B",
+  "file": "samples/sunsoft-5b-buzz.chipbox"
+ },
+ {
+  "name": "NES, Game Boy",
+  "file": "samples/nes-game-boy.chipbox"
+ },
+ {
+  "name": "Mega Drive, Master System",
+  "file": "samples/mega-drive-master-system.chipbox"
+ },
+ {
+  "name": "Sunsoft 5B, Konami VRC6",
+  "file": "samples/sunsoft-5b-konami-vrc6.chipbox"
+ },
+ {
+  "name": "AdLib, PC Speaker, Atari 8-bit",
+  "file": "samples/adlib-pc-speaker-atari-8-bit.chipbox"
+ },
+ {
+  "name": "Namco 163, Namco WSG",
+  "file": "samples/namco-163-namco-wsg.chipbox"
+ },
+ {
+  "name": "All consoles",
+  "file": "samples/all-consoles.chipbox"
+ },
+ {
+  "name": "Test: FM 4-op A",
+  "file": "samples/test-fm-4op-a.chipbox"
+ },
+ {
+  "name": "Test: FM 4-op B",
+  "file": "samples/test-fm-4op-b.chipbox"
+ },
+ {
+  "name": "Test: FM 2-op",
+  "file": "samples/test-fm-2op.chipbox"
+ },
+ {
+  "name": "Test: PSG knobs",
+  "file": "samples/test-psg-knobs.chipbox"
+ },
+ {
+  "name": "Test: noise",
+  "file": "samples/test-noise.chipbox"
+ },
+ {
+  "name": "Test: sweep, vibrato, kits",
+  "file": "samples/test-sweep.chipbox"
+ },
+ {
+  "name": "Test: draw waves",
+  "file": "samples/test-draw-waves.chipbox"
+ },
+ {
+  "name": "Test: rack mix",
+  "file": "samples/test-rack-mix.chipbox"
+ },
+ {
+  "name": "Test: PSG knobs 2",
+  "file": "samples/test-psg-knobs-2.chipbox"
+ },
+ {
+  "name": "Test: 5B and SID",
+  "file": "samples/test-5b-sid.chipbox"
+ }
+]

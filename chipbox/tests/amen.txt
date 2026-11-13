@@ -1,0 +1,148 @@
+# the Amen break tutorial's screenshots, in the order a reader gets them (fresh flash)
+300 held 0x100
+370 held 0
+1370 held 0x100
+2170 held 0
+2670 shot
+2970 enc 0 1
+3220 enc 0 1
+3520 shot
+3820 btn 1
+5620 enc 2 17
+6520 shot
+6820 btn 1
+7320 shot
+7620 enc 0 1
+8120 btn 1
+8620 shot
+8920 enc 0 1
+9070 enc 0 1
+9670 btn 1
+11170 shot
+11470 btn 11
+12370 shot
+12530 keys 0x20000
+12620 keys 0
+12920 shot
+13030 keys 0x1
+13120 keys 0
+13230 keys 0x10
+13320 keys 0
+13430 keys 0x80
+13520 keys 0
+13630 keys 0x800
+13720 keys 0
+13830 keys 0x4000
+13920 keys 0
+14030 keys 0x40000
+14120 keys 0
+14230 keys 0x200000
+14320 keys 0
+14430 keys 0x1000000
+14520 keys 0
+14820 shot
+14980 keys 0x8
+15070 keys 0
+15180 keys 0x80
+15270 keys 0
+15380 keys 0x1000
+15470 keys 0
+15580 keys 0x10000
+15670 keys 0
+15780 keys 0x200000
+15870 keys 0
+15980 keys 0x4000000
+16070 keys 0
+16370 shot
+16530 keys 0x2
+16620 keys 0
+16730 keys 0x1
+16820 keys 0
+16930 keys 0x10
+17020 keys 0
+17130 keys 0x40000
+17220 keys 0
+17330 keys 0x80000
+17420 keys 0
+17720 shot
+18020 btn 12
+20020 shot
+20320 btn 12
+21120 held 0x100
+21190 held 0
+22190 held 0x100
+22260 held 0
+23260 held 0x100
+23330 held 0
+24630 shot
+24930 btn 1
+25730 enc 6 1
+26230 shot
+26530 btn 1
+27330 enc 6 1
+27930 held 0x40
+28730 held 0
+29430 shot
+29730 held 0x40
+29850 held 0
+31050 shot
+31350 btn 11
+32410 keys 0x8
+32500 keys 0
+32610 keys 0x200000
+32700 keys 0
+32810 keys 0x4000000
+32900 keys 0
+33010 keys 0x1000000
+33100 keys 0
+33260 keys 0x2
+33350 keys 0
+33460 keys 0x80000
+33550 keys 0
+33850 shot
+34150 held 0x100
+34220 held 0
+35220 held 0x100
+35290 held 0
+36290 held 0x100
+36360 held 0
+37960 btn 1
+38760 enc 6 1
+39360 enc 6 1
+39960 held 0x40
+40760 held 0
+41760 held 0x40
+41880 held 0
+43380 btn 11
+44440 keys 0x20000
+44530 keys 0
+44640 keys 0x40000
+44730 keys 0
+44890 keys 0x8
+44980 keys 0
+45090 keys 0x4
+45180 keys 0
+45340 keys 0x2
+45430 keys 0
+45540 keys 0x1
+45630 keys 0
+45740 keys 0x40
+45830 keys 0
+45990 keys 0x400000
+46080 keys 0
+46190 keys 0x40000
+46280 keys 0
+46580 shot
+46880 held 0x100
+46950 held 0
+47950 held 0x100
+48020 held 0
+49020 held 0x100
+49090 held 0
+50690 enc 0 -1
+50990 enc 0 -1
+51290 enc 0 -1
+51590 shot
+51890 btn 12
+54890 shot
+55390 end

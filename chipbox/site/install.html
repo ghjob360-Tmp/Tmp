@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Chipbox</title>
+<style>
+  :root { --bg:#0e0e12; --panel:#181820; --ink:#e8e8ee; --dim:#8a8a9a; --red:#eb4034; --blue:#46aaff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  main { max-width:620px; margin:0 auto; padding:48px 16px 72px; }
+  h1 { font-size:34px; margin:0 0 20px; letter-spacing:.02em; }
+  .tag { display:inline-block; padding:2px 10px; background:var(--red); color:#fff; font-size:13px; letter-spacing:.12em; vertical-align:middle; margin-left:10px; }
+  p { margin:0 0 12px; }
+  a { color:var(--blue); }
+  button { font:inherit; font-weight:700; background:var(--ink); color:var(--bg); border:0; padding:12px 28px; cursor:pointer; }
+  button:disabled { opacity:.3; cursor:default; }
+  progress { width:100%; height:6px; margin-top:20px; }
+  #status { margin-top:12px; min-height:1.55em; }
+  #version { color:var(--dim); margin-left:14px; }
+  .small { color:var(--dim); font-size:14px; }
+  pre { color:var(--dim); font:inherit; font-size:12px; white-space:pre-wrap; margin-top:16px; }
+  code { background:var(--panel); padding:1px 6px; }
+</style>
+<link rel="stylesheet" href="css/gb.css">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+</head>
+<body>
+<main>
+  <h1><a href="./">Chipbox</a><span class="tag">INSTALL</span></h1>
+  <nav class="gbnav" aria-label="Pages"><a class="hot" href="install.html" aria-current="page">Install</a><a href="play/">Play online</a><a href="manual/">Tutorials</a><a href="guide/">Manual</a><a href="projects/">Projects</a><a href="cheatsheet/">Cheat sheet</a><a href="https://github.com/pbarilla/chipbox/releases/latest">Download</a><a href="https://github.com/pbarilla/chipbox">Source</a></nav>
+
+
+  <p>Plug in the FM-1.</p>
+  <p><button id="go" disabled>Install</button><span id="version"></span></p>
+  <progress id="bar" max="100" value="0"></progress>
+  <p id="status"></p>
+  <p class="small">Don't unplug it till it's done.</p>
+  <p class="small">Installer by <a href="https://github.com/hugelton/Felucca">Felucca</a>. <a href="./">Back</a></p>
+  <pre id="log"></pre>
+</main>
+<script type="module" src="js/install.js"></script>
+</body>
+</html>
