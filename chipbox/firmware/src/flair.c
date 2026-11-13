@@ -61,9 +61,9 @@ static void flair_frame(uint32_t kind, uint32_t ms, uint32_t arg, const theme_t 
         }
         break; }
     case AN_VIEW: {                                 /* a band of the view's colour sweeps open, names the view, and closes (arg 3: the punch-in layer) */
-        static const uint16_t COL[5] = {RGB(240, 150, 40), RGB(60, 190, 170), RGB(150, 110, 235), RGB(235, 100, 170), RGB(70, 150, 255)};
-        static const char *const WORD[5] = {"RACK", "CHIP", "SONG", "FX", "SEQ"};
-        uint32_t v = arg == 1u ? 0u : arg == 0u ? 1u : arg == 2u ? 2u : arg == 4u ? 4u : 3u;
+        static const uint16_t COL[6] = {RGB(240, 150, 40), RGB(60, 190, 170), RGB(150, 110, 235), RGB(235, 100, 170), RGB(70, 150, 255), RGB(255, 70, 170)};
+        static const char *const WORD[6] = {"RACK", "CHIP", "SONG", "FX", "SEQ", "MIX"};
+        uint32_t v = arg == 1u ? 0u : arg == 0u ? 1u : arg == 2u ? 2u : arg == 4u ? 4u : arg == 5u ? 5u : 3u;
         if (ms < 140u) { int32_t w = ease(ms, 140, 0, 240); cv_rect(120 - w / 2, 0, w, HDR_H, COL[v]); }
         else if (ms < 440u) {
             int32_t tw = text_w(&FONT_L, WORD[v]), x0 = 120 - (tw + 26) / 2;

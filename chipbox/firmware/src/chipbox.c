@@ -453,6 +453,7 @@ static void draw_note(const theme_t *t, uint32_t note)
 #include "fxview.c"
 #include "flair.c"
 #include "chipview.c"
+#include "mixview.c"
 #include "menu.c"
 #include "addmenu.c"
 #include "manual.c"
@@ -608,7 +609,7 @@ static void app_main(void)
         for (k = 0; k < 27u; k++) {
             if ((down >> k & 1u) && menu_on && (menu_kind == MK_ADD || menu_kind == MK_ADD2)) { held[k] = (uint8_t)(base + k); held_ch[k] = 255u; add_key_on(held[k]); }       /* the Add Channel list: the keys play the console on the bar */
             else if (down >> k & 1u) {
-                held[k] = (uint8_t)(base + k); held_ch[k] = (uint8_t)sel;
+                held[k] = (uint8_t)scale_snap(base + k); held_ch[k] = (uint8_t)sel;       /* (the MIX view's scale lock: a key off the scale plays the note below it in the scale) */
                 if (sel < chan_n) {
                     uint32_t dr = IS_DRUM(chan[sel].kind), bk = BLK_IDX[k] < 0 ? 99u : (uint32_t)BLK_IDX[k];      /* a drum channel: the black keys are the kit (BD SD CP TM CH OH CY CB) */
                     if (!dr) chip_note(sel, held[k], 127);
@@ -725,9 +726,9 @@ static void app_main(void)
             else man_open_chip(sel, chip_page);
         } else if (home_tap) {
             if (menu_on) { if (man_lock && menu_kind == MK_MANUAL) { dirty = 1; t_change = fm1_ms; } menu_on = 0; }          /* HOME closes any menu (the Brothers Link page too); leaving the quick start saves the settings */
-            else if (fx_layer) { fx_layer = 0; fx_off(); anim_start(AN_VIEW, view); }       /* HOME leaves the punch-in layer first */
+            else if (fx_layer) { fx_layer = 0; fx_off(); anim_start(AN_VIEW, view == 4u ? 5u : view); }       /* HOME leaves the punch-in layer first */
             else if (view == 3u) { view = 1; anim_start(AN_VIEW, 1u); }
-            else { view = view == 1u ? (chan_n ? 0u : 2u) : view == 0u ? 2u : 1u; anim_start(AN_VIEW, view); }       /* HOME: the rack, the chip, the song, the rack ... */
+            else { view = view == 1u ? (chan_n ? 0u : 2u) : view == 0u ? 2u : view == 2u ? 4u : 1u; anim_start(AN_VIEW, view == 4u ? 5u : view); }       /* HOME: the rack, the chip, the song, the mix, the rack ... */
             rack_force = 1; chip_drawn = ~0u;
         }
         if (b & (1u << BTN_PLAY)) {                     /* PLAY: in the song, the song from the cursor; anywhere else, the page on show round and round */
@@ -748,7 +749,7 @@ static void app_main(void)
         }
         if ((b & (1u << BTN_FX)) && !menu_on) {          /* FX: the punch-in layer on and off */
             fx_layer ^= 1u;
-            anim_start(AN_VIEW, fx_layer ? 3u : view);
+            anim_start(AN_VIEW, fx_layer ? 3u : view == 4u ? 5u : view);
             if (fx_layer) { for (k = 0; k < 27u; k++) if (prev >> k & 1u && held_ch[k] < chan_n) chip_off(held_ch[k]); }
             else fx_off();
             rack_force = 1; chip_drawn = ~0u;
@@ -783,9 +784,9 @@ static void app_main(void)
         if ((b & (1u << BTN_ARP)) && !menu_on && !pick_on) {          /* ARP: note tails on or off */
             rack_tails ^= 1u; set.an[2] = (uint8_t)((set.an[2] & 127u) | rack_tails << 7); dirty = 1; t_change = fm1_ms; rack_inval = 1;
         }
-        if ((b & (1u << BTN_LFO)) && !menu_on && !pick_on) {          /* LFO: undo */
+        if ((b & (1u << BTN_LFO)) && !menu_on && !pick_on) {          /* LFO: undo; ENV + LFO: redo */
             uint32_t vv = seq_view, sc = song_cur;
-            if (undo_go() == 0) {
+            if ((fm1_in.buttons >> BTN_ENV & 1u) ? redo_go() == 0 : undo_go() == 0) {
                 if (vv < page_n) seq_view = (uint8_t)vv;
                 if (sc <= song_len) song_cur = sc;
                 rack_inval = 1; rack_rm = 0; chip_drawn = ~0u; redraw = 1; anim_start(AN_UNDO, 1);
@@ -901,6 +902,18 @@ static void app_main(void)
             if (e) { int32_t v = (int32_t)seq_bpm + e; seq_bpm = (uint32_t)(v < 40 ? 40 : v > 240 ? 240 : v); proj_edited(); anim_tempo(); }
             fm1_enc_take(ENC_ALGORITHM);
             for (k = 1; k < 4u; k++) fm1_enc_take(ENC_KNOB1 + k);
+        } else if (view == 4u) {                        /* MIX: ALGORITHM the page, the knobs the settings; PRESETS the channel the keys play; SELECT the tape */
+            e = fm1_enc_take(ENC_ALGORITHM);
+            if (e) mix_page = (mix_page + (e < 0 ? MPGS - 1u : 1u)) % MPGS;
+            for (k = 0; k < 4u; k++) { e = fm1_enc_take(ENC_KNOB1 + k); if (e) { mix_knob(k, e); proj_edited(); } }
+            e = fm1_enc_take(ENC_PRESETS);
+            if (e && chan_n) { chip_off(sel); sel = e < 0 ? (sel ? sel - 1u : 0u) : (sel + 1u < chan_n ? sel + 1u : chan_n - 1u); anim_start(AN_CHAN, sel | (uint32_t)KIND_CHIP[chan[sel].kind] << 8); }
+            e = fm1_enc_take(ENC_SELECT);
+            if (e) { seq_shuttle(e); anim_tape(); }
+            {   uint32_t oct_was = (uint32_t)(set.oct + 2);
+                if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; dirty = 1; t_change = fm1_ms; }
+                if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; dirty = 1; t_change = fm1_ms; }
+                if ((uint32_t)(set.oct + 2) != oct_was) anim_cont(AN_OCT, oct_was << 4 | (uint32_t)(set.oct + 2), 900u); }
         } else if (view == 3u) {                        /* STEP: SELECT moves the cursor, PRESETS the channel, ALGORITHM the page, EDIT clears the block, the octave buttons as everywhere */
             uint32_t oct_was = (uint32_t)(set.oct + 2);
             e = fm1_enc_take(ENC_SELECT);
@@ -1250,6 +1263,7 @@ static void app_main(void)
             fx_view_update(); hdr_update(view, sel, t, ch_chip, last_note);
         }
         else if (view == 3u && sel < chan_n) { if (IS_DRUM(chan[sel].kind)) drum_update(sel, rack_force); else ed_update(sel, base, rack_force); rack_force = 0; hdr_update(3, sel, t, ch_chip, last_note); }
+        else if (view == 4u) { mix_update(rack_force); rack_force = 0; hdr_update(4, sel, t, ch_chip, last_note); }
         else if (view == 2u) { sg_update(rack_force); rack_force = 0; hdr_update(2, sel, t, ch_chip, last_note); }
         else if (view == 1u) { rack_update(sel, rack_force); rack_force = 0; hdr_update(1, sel, t, ch_chip, last_note); }
         else if (sel < chan_n) {

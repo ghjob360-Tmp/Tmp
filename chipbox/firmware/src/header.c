@@ -671,19 +671,19 @@ static void hdr_idle(const theme_t *t, uint32_t view, uint32_t chip, uint32_t se
 #define NAV_H 24
 static void nav_draw(uint32_t view)
 {
-    static const uint8_t ORDER[3] = {1, 0, 2};
-    static const char *const WORD[3] = {"RACK", "CHIP", "SONG"};
-    static const uint16_t COL[3] = {RGB(240, 150, 40), RGB(60, 190, 170), RGB(150, 110, 235)};
+    static const uint8_t ORDER[4] = {1, 0, 2, 4};
+    static const char *const WORD[4] = {"RACK", "CHIP", "SONG", "MIX"};
+    static const uint16_t COL[4] = {RGB(240, 150, 40), RGB(60, 190, 170), RGB(150, 110, 235), RGB(255, 70, 170)};
     uint32_t i;
     cv_begin(240, NAV_H, R_BG);
-    for (i = 0; i < 3u; i++) {
-        int32_t x = (int32_t)i * 80;
+    for (i = 0; i < 4u; i++) {
+        int32_t x = (int32_t)i * 60;
         uint32_t on = ORDER[i] == view;
         uint16_t c = COL[i], ink = on ? R_BG : mix16(R_BG, c, 190);
-        cv_rect(x + 1, 0, 78, NAV_H, on ? c : mix16(R_BG, c, 36));
-        cv_rect(x + 1, 0, 78, 3, c);
-        ico_view(i, x + 10, 5, ink);
-        cv_text(x + 34, 4, &FONT_S, WORD[i], ink);
+        cv_rect(x + 1, 0, 58, NAV_H, on ? c : mix16(R_BG, c, 36));
+        cv_rect(x + 1, 0, 58, 3, c);
+        if (i < 3u) ico_view(i, x + 5, 5, ink); else { int32_t j; for (j = 0; j < 3; j++) { cv_rect(x + 6 + j * 5, 7, 2, 13, ink); cv_rect(x + 5 + j * 5, 9 + (j * 5) % 9, 4, 3, ink); } }
+        cv_text(x + 22, 4, &FONT_S, WORD[i], ink);
     }
     cv_blit(0, NAV_Y);
 }

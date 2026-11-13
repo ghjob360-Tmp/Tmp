@@ -194,9 +194,11 @@ static int proj_unpack(const uint8_t *p, uint32_t len)      /* 0: loaded; else n
 #define UNDO_N 6u
 static uint8_t undo_buf[UNDO_N][PROJ_BANK - PROJ_HDR] POOL, undo_base[PROJ_BANK - PROJ_HDR] POOL;
 static uint32_t undo_len[UNDO_N], undo_cnt, undo_head, undo_base_len, undo_base_ok;
+static uint32_t redo_cnt;                       /* undone states kept for redo: the slots after undo_head (an edit drops them) */
 static void undo_push(void)                     /* a new group of edits begins: how it was goes on the stack */
 {
     if (!undo_base_ok) return;
+    redo_cnt = 0;
     memcpy(undo_buf[undo_head], undo_base, undo_base_len); undo_len[undo_head] = undo_base_len;
     undo_head = (undo_head + 1u) % UNDO_N;
     if (undo_cnt < UNDO_N) undo_cnt++;
@@ -206,16 +208,31 @@ static void undo_tick(void)                     /* main loop: a quiet moment clo
     if (add_aud_c >= 0) return;                 /* the Add Channel audition has a channel on loan: not part of the project */
     if (!undo_base_ok || (undo_open && fm1_ms - undo_t > 600u)) { undo_base_len = proj_pack(undo_base); undo_base_ok = undo_base_len != 0u; undo_open = 0; }
 }
-static void undo_reset(void) { undo_cnt = 0; undo_base_ok = 0; undo_open = 0; }
+static void undo_reset(void) { undo_cnt = 0; redo_cnt = 0; undo_base_ok = 0; undo_open = 0; }
+static int undo_step(uint32_t i)                /* the state in slot i becomes the project; the project as it was takes the slot (undo and redo swap) */
+{
+    const uint32_t l = undo_len[i];
+    uint32_t rl;
+    memcpy(undo_base, undo_buf[i], l);
+    rl = proj_pack(undo_buf[i]);
+    if (!rl || proj_unpack(undo_base, l) != 0) { if (rl) memcpy(undo_buf[i], undo_base, l); undo_len[i] = l; return -1; }
+    undo_len[i] = rl;
+    undo_base_len = l; undo_base_ok = 1; undo_open = 0;
+    proj_dirty = 1; proj_t_edit = fm1_ms;
+    return 0;
+}
 static int undo_go(void)                        /* 0: stepped back one */
 {
-    uint32_t i;
-    if (!undo_cnt) return -1;
-    i = (undo_head + UNDO_N - 1u) % UNDO_N;
-    if (proj_unpack(undo_buf[i], undo_len[i]) != 0) return -1;
-    undo_head = i; undo_cnt--;
-    memcpy(undo_base, undo_buf[i], undo_len[i]); undo_base_len = undo_len[i]; undo_base_ok = 1; undo_open = 0;
-    proj_dirty = 1; proj_t_edit = fm1_ms;
+    const uint32_t i = (undo_head + UNDO_N - 1u) % UNDO_N;
+    if (!undo_cnt || undo_step(i) != 0) return -1;
+    undo_head = i; undo_cnt--; redo_cnt++;
+    return 0;
+}
+static int redo_go(void)                        /* 0: stepped forward one (ENV + LFO) */
+{
+    const uint32_t i = undo_head;
+    if (!redo_cnt || undo_step(i) != 0) return -1;
+    undo_head = (i + 1u) % UNDO_N; undo_cnt++; redo_cnt--;
     return 0;
 }
 static void proj_blank(void) { seq_stop(); chan_lock = 1; seq_clear(); chan_lock = 0; undo_reset(); }      /* an empty project: no channels yet */

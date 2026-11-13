@@ -799,10 +799,8 @@ static void ep_panel(const theme_t *t, uint32_t c, uint32_t pg, uint32_t page, u
     }
     cv_blit(0, CV_ENV_Y);
 }
-static void ep_cards(const theme_t *t, uint32_t c, uint32_t pg)
+static void ep_cards_b(const theme_t *t, uint32_t chip, const epg_t *e, const uint8_t *base)      /* four cards: the field's name, its value in words, a bar */
 {
-    const epg_t *e = ep_pg(c, pg);
-    const uint32_t chip = KIND_CHIP[chan[c].kind];
     uint32_t k;
     cv_begin(240, CV_CARDS_H, t->bg);
     for (k = 0; k < 4u; k++) {
@@ -812,14 +810,15 @@ static void ep_cards(const theme_t *t, uint32_t c, uint32_t pg)
         skin_box(chip, t, x, 0, CV_CARD_W, CV_CARDS_H, t->bar);
         if (!f->lab[0]) continue;
         cv_text(x + (CV_CARD_W - text_w(&FONT_S, f->lab)) / 2, 4, &FONT_S, f->lab, t->fg);
-        ep_text(c, f, sv);
+        ep_textb(base, f, sv);
         cv_text(x + (CV_CARD_W - text_w(&FONT_S, sv)) / 2, 22, &FONT_S, sv, t->fg);
-        {   const int32_t v = ep_get(c, f) - f->lo, span = (int32_t)f->hi - f->lo;
+        {   const int32_t v = ep_getb(base, f) - f->lo, span = (int32_t)f->hi - f->lo;
             cv_rect(x + 6, 44, CV_CARD_W - 12, 4, t->dim);
             if (span > 0) cv_rect(x + 6, 44, (CV_CARD_W - 12) * v / span, 4, t->acc); }
     }
     cv_blit(0, CV_CARDS_Y);
 }
+static void ep_cards(const theme_t *t, uint32_t c, uint32_t pg) { ep_cards_b(t, KIND_CHIP[chan[c].kind], ep_pg(c, pg), (const uint8_t *)&chan[c].x); }
 static void chip_panels(const theme_t *t, uint32_t c, uint32_t page)
 {
     if ((!IS_FMK(chan[c].kind) || !fm_foc) && page >= ep_first(c)) { chip_tabs(t, c); ep_panel(t, c, page - ep_first(c), page, pages(c)); ep_cards(t, c, page - ep_first(c)); return; }

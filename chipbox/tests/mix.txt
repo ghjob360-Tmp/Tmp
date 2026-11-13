@@ -1,0 +1,34 @@
+# the MIX view (HOME past SONG): its pages, knobs; then undo (LFO) and redo (ENV + LFO) of a tempo change
+300 held 0x100
+350 held 0
+600 held 0x100
+650 held 0
+900 held 0x100
+950 held 0
+1200 held 0x100
+1250 held 0
+1600 enc 2 12
+1700 enc 3 3
+1800 enc 4 4
+2000 shot
+2100 enc 1 1
+2150 enc 2 2
+2300 shot
+2400 enc 1 1
+2450 enc 2 2
+2500 enc 4 1
+2700 shot
+2800 enc 1 1
+2850 enc 4 6
+3000 shot
+3100 enc 1 1
+3150 enc 2 9
+3200 enc 3 6
+3400 shot
+3500 btn 5
+3800 shot
+3900 held 0x10
+3950 btn 5
+4000 held 0
+4200 shot
+4300 end

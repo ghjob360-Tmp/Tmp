@@ -49,16 +49,16 @@ static uint32_t ep_list(uint32_t c, uint8_t *l)  /* the channel's extra pages, i
 }
 static uint32_t ep_n(uint32_t c) { uint8_t l[16]; return ep_list(c, l); }
 static const epg_t *ep_pg(uint32_t c, uint32_t i) { uint8_t l[16]; const uint32_t n = ep_list(c, l); return &EPG[l[i < n ? i : 0]]; }
-static int32_t ep_get(uint32_t c, const efd_t *f)
+static int32_t ep_getb(const uint8_t *b, const efd_t *f)
 {
-    const uint8_t *b = (const uint8_t *)&chan[c].x;
     int32_t v = f->fl & EF_SIGNED ? (int32_t)(int8_t)b[f->off] : (int32_t)b[f->off];
     if ((f->fl & EF_ZMAX) && !v) v = f->hi;
     return v;
 }
-static void ep_text(uint32_t c, const efd_t *f, char *s)        /* the value as the card shows it */
+static int32_t ep_get(uint32_t c, const efd_t *f) { return ep_getb((const uint8_t *)&chan[c].x, f); }
+static void ep_textb(const uint8_t *b, const efd_t *f, char *s)  /* the value as the card shows it */
 {
-    const int32_t v = ep_get(c, f), n = f->fl & EF_PM ? v - (int32_t)f->hi / 2 : v;
+    const int32_t v = ep_getb(b, f), n = f->fl & EF_PM ? v - (int32_t)f->hi / 2 : v;
     if (f->nm) { const char *p = f->nm[v < 0 ? 0 : v]; uint32_t i = 0; while (p[i] && i < 7u) { s[i] = p[i]; i++; } s[i] = 0; return; }
     {   uint32_t a = (uint32_t)(n < 0 ? -n : n), i = 0;
         char t[6]; uint32_t k = 0;
@@ -67,15 +67,31 @@ static void ep_text(uint32_t c, const efd_t *f, char *s)        /* the value as 
         while (k) s[i++] = t[--k];
         s[i] = 0; }
 }
+static void ep_text(uint32_t c, const efd_t *f, char *s) { ep_textb((const uint8_t *)&chan[c].x, f, s); }
+static void ep_setb(uint8_t *b, const efd_t *f, int32_t d)
+{
+    int32_t v = ep_getb(b, f) + d;
+    v = v < f->lo ? f->lo : v > (int32_t)f->hi ? (int32_t)f->hi : v;
+    b[f->off] = (uint8_t)v;
+}
+/* the MIX view's pages (mixview.c): the project's master settings */
+#define MO(f) ((uint8_t)__builtin_offsetof(mset_t, f))
+static const char *const NM_SW[26] = {"50%", "51%", "52%", "53%", "54%", "55%", "56%", "57%", "58%", "59%", "60%", "61%", "62%", "63%", "64%", "65%", "66%", "67%", "68%", "69%", "70%", "71%", "72%", "73%", "74%", "75%"};
+static const char *const NM_CM[4] = {"OFF", "I", "II", "I+II"}, *const NM_DM[2] = {"STEREO", "PING"}, *const NM_DS[3] = {"LINEAR", "CURVE", "HOLD"};
+static const char *const NM_GT[16] = {"OFF", "25ms", "50ms", "75ms", "100", "125", "150", "175", "200", "225", "250", "275", "300", "325", "350", "375"};
+#define MPGS 5u
+static const epg_t MPG[MPGS] = {
+    {"GROOVE", "swing; the keys' scale", {EFX("SWING", MO(swing), 0, 25, 0, NM_SW), EFX("SCALE", MO(scale), 0, SCALES - 1, 0, SCALE_NAME), EFX("KEY", MO(key), 0, 11, 0, KEY_NAME), ENONE}},
+    {"CHORUS", "the Juno's two modes", {EFX("MODE", MO(cmode), 0, 3, 0, NM_CM), EFX("RATE", MO(crate), 0, 15, 0, 0), EFX("DEPTH", MO(cdep), 0, 15, 0, 0), ENONE}},
+    {"DELAY", "in time; ECHO pad too", {EFX("TIME", MO(dtime), 0, DLY_N - 1, 0, DLY_NAME), EFX("FEEDBK", MO(dfb), 0, 15, 0, 0), EFX("MODE", MO(dmode), 0, 1, 0, NM_DM), EFX("TONE", MO(dtone), 0, 15, 0, 0)}},
+    {"REVERB", "size; gated 80s snare", {EFX("SIZE", MO(rsize), 0, 15, 0, 0), EFX("DAMP", MO(rdamp), 0, 15, 0, 0), EFX("GATE", MO(rgate), 0, 15, 0, NM_GT), ENONE}},
+    {"MASTER", "glue, warmth, pump", {EFX("COMP", MO(comp), 0, 15, 0, 0), EFX("SAT", MO(sat), 0, 15, 0, 0), EFX("DUCK", MO(drel), 0, 15, 0, 0), EFX("SHAPE", MO(dshape), 0, 2, 0, NM_DS)}},
+};
 static void ep_knob(uint32_t c, uint32_t pg, uint32_t k, int32_t d)
 {
     const efd_t *f = &ep_pg(c, pg)->f[k];
-    uint8_t *b = (uint8_t *)&chan[c].x;
-    int32_t v;
     if (!f->lab[0]) return;
-    v = ep_get(c, f) + d;
-    v = v < f->lo ? f->lo : v > (int32_t)f->hi ? (int32_t)f->hi : v;
-    b[f->off] = (uint8_t)v;
+    ep_setb((uint8_t *)&chan[c].x, f, d);
     live_dirty[c] = 1;
 }
 /* the arp page's fields, wider than before: 22 chords (USER last), 11 rates (in time from 4), 6 directions */
