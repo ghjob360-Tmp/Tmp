@@ -3,12 +3,17 @@
  * the keyboard below. A key sets the block and moves on; SELECT moves the cursor; EDIT clears the block; PLAY loops the page.
  * Included by chipbox.c after songview.c. */
 static uint32_t ed_cur, ed_lane;                 /* the cursor's step; the drum picked on a drum channel */
+static int32_t ed_hold_st = -1;                 /* the step whose key is held (the knobs work on it), -1 none */
+static uint32_t ed_strip_t;                      /* the drum lanes: when a knob last moved (the strip shows a while) */
+#include "stepx.c"
 static void ed_update(uint32_t c, uint32_t base, uint32_t force)
 {
     static uint32_t sig[4];
     const theme_t *t = &THEME[KIND_CHIP[chan[c].kind]];
     uint32_t cur[4], i, h = 0, ps = seq_run && !seq_hold ? seq_step : 99u, cn;
-    for (i = 0; i < SEQ_LEN; i++) h = h * 31u + pat[seq_view][c][i].note + 7u * pat[seq_view][c][i].gate;
+    for (i = 0; i < SEQ_LEN; i++) h = h * 31u + pat[seq_view][c][i].note + 7u * pat[seq_view][c][i].gate + 131u * pat[seq_view][c][i].vel + 977u * pat[seq_view][c][i].spare + 3331u * (sx_fl(seq_view, c, i) + 256u * sx_lock(seq_view, c, i));
+    h = h * 31u + ed_layer + 7u * (uint32_t)seq_bpm + 11u * chan[c].x.speed + 13u * chan[c].x.len + 17u * chan[c].x.lkt;
+    ps = seq_run && !seq_hold ? ch_pos(c) : 99u;
     cur[0] = h; cur[1] = ed_cur | ps << 8 | c << 16 | (uint32_t)seq_view << 24; cur[2] = fm1_in.notes; cur[3] = base;
     if (!force && !memcmp(cur, sig, sizeof cur)) return;
     memcpy(sig, cur, sizeof cur);
@@ -23,6 +28,8 @@ static void ed_update(uint32_t c, uint32_t base, uint32_t force)
         if (!(i & 3u)) cv_rect(x, y, 28, 3, n ? t->bg : t->acc);                 /* a stripe on each beat */
         if (!n) { fmt_u(s, i + 1u); cv_text(x + (28 - text_w(&FONT_S, s)) / 2, y + 14, &FONT_S, s, mix16(R_BG, t->acc, 120)); }       /* an empty block: its number */
         if (n) { note_name(s, n); cv_text(x + (28 - text_w(&FONT_S, s)) / 2, y + 14, &FONT_S, s, KIND_CHIP[chan[c].kind] == CHIP_NES ? R_WHITE : t->bg); }
+        if (n) ed_marks(c, i, x, y, KIND_CHIP[chan[c].kind] == CHIP_NES ? R_WHITE : t->bg);
+        if (i >= ch_len(c)) cv_rect(x, y + 18, 28, 2, mix16(R_BG, t->acc, 120));          /* past the channel's length: not played */
         if (i == ps) cv_rect(x, y + 36, 28, 4, R_WHITE);                         /* the playhead */
         if (i == ed_cur) { cv_rect(x - 1, y - 1, 30, 2, R_WHITE); cv_rect(x - 1, y + 39, 30, 2, R_WHITE); cv_rect(x - 1, y - 1, 2, 42, R_WHITE); cv_rect(x + 27, y - 1, 2, 42, R_WHITE); }
     }
@@ -36,7 +43,7 @@ static void ed_update(uint32_t c, uint32_t base, uint32_t force)
         }
     }
     cv_blit(0, 48);
-    cv_begin(240, 62, R_BG);                                                     /* the keyboard: F3 to G5, the cursor's note and the keys held lit */
+    cv_begin(240, 30, R_BG);                                                     /* the keyboard: F3 to G5, the cursor's note and the keys held lit */
     {
         int32_t wi = 0, k;
         for (k = 0; k < 27; k++) {                                               /* whites first */
@@ -44,8 +51,8 @@ static void ed_update(uint32_t c, uint32_t base, uint32_t force)
             if (pc == 1u || pc == 3u || pc == 6u || pc == 8u || pc == 10u) continue;
             {
                 uint32_t lit = fm1_in.notes >> k & 1u, mine = cn && cn == base + (uint32_t)k;
-                cv_rect(wi * 15, 0, 14, 58, lit ? RGB(70, 150, 255) : mine ? t->acc : RGB(212, 212, 218));
-                if (pc == 0u) cv_rect(wi * 15 + 5, 48, 4, 4, RGB(90, 90, 100));  /* a dot on each C */
+                cv_rect(wi * 15, 0, 14, 28, lit ? RGB(70, 150, 255) : mine ? t->acc : RGB(212, 212, 218));
+                if (pc == 0u) cv_rect(wi * 15 + 5, 21, 4, 4, RGB(90, 90, 100));  /* a dot on each C */
             }
             wi++;
         }
@@ -54,11 +61,12 @@ static void ed_update(uint32_t c, uint32_t base, uint32_t force)
             uint32_t pc = (5u + (uint32_t)k) % 12u;
             if (pc == 1u || pc == 3u || pc == 6u || pc == 8u || pc == 10u) {
                 uint32_t lit = fm1_in.notes >> k & 1u, mine = cn && cn == base + (uint32_t)k;
-                cv_rect(wi * 15 - 5, 0, 10, 36, lit ? RGB(40, 110, 200) : mine ? mix16(t->acc, R_BG, 90) : RGB(30, 30, 38));
+                cv_rect(wi * 15 - 5, 0, 10, 17, lit ? RGB(40, 110, 200) : mine ? mix16(t->acc, R_BG, 90) : RGB(30, 30, 38));
             } else wi++;
         }
     }
-    cv_blit(0, 148);
+    cv_blit(0, 146);
+    ed_strip(c, ed_hold_st >= 0 ? (uint32_t)ed_hold_st : ed_cur, t);
 }
 
 /* DRUMS: a drum channel's page as lanes, a row per drum and a block per step. The black keys pick the drum (the 11: BD SD LT MT HT RS CP CH OH CR RD),
@@ -83,6 +91,8 @@ static void drum_cols(uint32_t c, int32_t xa, int32_t w, int32_t line)     /* bo
             }
         }
         if (line >= 0) rk_rect(line, 0, 2, (int32_t)(n * 15u), R_WHITE);                        /* the playhead */
+        if (!b) rk_rect(rack_x(ed_cur), 0, 10, 2, R_WHITE);                                       /* the cursor (the knobs' step) */
+        for (i = 0; i < SEQ_LEN && !b; i++) if (pat[seq_view][c][i].spare) rk_rect(rack_x(i) + 3, 0, 4, 1, RGB(255, 200, 60));        /* a step with extras */
         cv_blit((uint32_t)xa, 48u + b * 90u);
     }
 }
@@ -93,11 +103,13 @@ static void drum_update(uint32_t c, uint32_t force)       /* the whole page when
     uint32_t cur[3], i, h = 0;
     int32_t line = rack_line();
     for (i = 0; i < SEQ_LEN; i++) h = h * 31u + dstep_hits(&pat[seq_view][c][i]) + 7u * dstep_acc(&pat[seq_view][c][i]) + 3u;
-    cur[0] = h; cur[1] = ed_lane | (seq_run | seq_hold << 1) << 8 | c << 16 | (uint32_t)seq_view << 24; cur[2] = 0;
+    for (i = 0; i < SEQ_LEN; i++) h = h * 7u + pat[seq_view][c][i].spare;
+    cur[0] = h; cur[1] = ed_lane | (seq_run | seq_hold << 1) << 8 | c << 16 | (uint32_t)seq_view << 24; cur[2] = ed_cur | ed_layer << 8 | (fm1_ms - ed_strip_t < 1500u) << 12 | chan[c].x.speed << 16 | chan[c].x.len << 20;
     if (force || memcmp(cur, sig, sizeof cur)) {
         memcpy(sig, cur, sizeof cur);
         if (force) { view_clear(R_BG); hdr_force = 1; }
         drum_cols(c, 0, 240, line);
+        if (fm1_ms - ed_strip_t < 1500u) ed_strip(c, ed_cur, &THEME[KIND_CHIP[chan[c].kind]]);
         line_d = line;
     } else if (line != line_d) {
         if (line_d >= 0) drum_cols(c, line_d, 2, -1);

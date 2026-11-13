@@ -635,6 +635,15 @@ static void app_main(void)
                             }
                             rack_inval = 1; proj_edited();
                         } else if (view == 1u && (!seq_run || seq_hold)) { seq_toggle(sel, rack_cur, held[k]); rack_inval = 1; proj_edited(); }
+                        else if (view == 3u && ed_hold_k >= 0 && (keys >> ed_hold_k & 1u)) {       /* STEP, a key already held: the keys held make a chord on its step */
+                            uint8_t ns[27]; uint32_t nn = 0, kk, root, sh;
+                            for (kk = 0; kk < 27u; kk++) if (keys >> kk & 1u) ns[nn++] = held[kk];
+                            sh = chord_match(ns, nn, &root);
+                            { step_t *x = &pat[seq_view][sel][ed_hold_step]; x->note = (uint8_t)root;
+                              sx_put(seq_view, sel, ed_hold_step, sx_lock(seq_view, sel, ed_hold_step), (sx_fl(seq_view, sel, ed_hold_step) & ~(uint32_t)SXF_CHORD) | sh);
+                              if (sh && !chan[sel].x.chv && !(is_va(chan[sel].kind) && chan[sel].x.va[VA_POLY] > 1u)) chan[sel].x.chv = 2; }       /* (a chord needs voices: the two channels below, unless it plays chords itself) */
+                            proj_edited();
+                        }
                         else if (view == 3u) { step_t *x = &pat[seq_view][sel][ed_cur]; x->note = held[k]; x->vel = 100; x->gate = 5; ed_hold_k = (int32_t)k; ed_hold_step = ed_cur; ed_cur = (ed_cur + 1u) % SEQ_LEN; proj_edited(); }       /* STEP: the key sets the block and moves on */       /* stopped or paused: on the step the playhead is at */
                     }
                 }
@@ -900,25 +909,34 @@ static void app_main(void)
             if (e && chan_n) { chip_off(sel); sel = e < 0 ? (sel ? sel - 1u : 0u) : (sel + 1u < chan_n ? sel + 1u : chan_n - 1u); anim_start(AN_CHAN, sel | (uint32_t)KIND_CHIP[chan[sel].kind] << 8); }
             e = fm1_enc_take(ENC_ALGORITHM);
             if (e) seq_page(e);
-            e = fm1_enc_take(ENC_KNOB1);
-            if (e) { int32_t v = (int32_t)seq_bpm + e; seq_bpm = (uint32_t)(v < 40 ? 40 : v > 240 ? 240 : v); proj_edited(); anim_tempo(); }
-            e = fm1_enc_take(ENC_KNOB2);                /* KNOB 2: how long the note is, in steps: the one you are holding, or the one under the cursor */
-            if (e && sel < chan_n) {
-                uint32_t st = ed_hold_k >= 0 ? ed_hold_step : ed_cur;
-                step_t *x = &pat[seq_view][sel][st];
-                if (x->note) {
-                    int32_t n = ((int32_t)x->gate + 1) / 6 + e, mx = (int32_t)(SEQ_LEN - st);
-                    n = n < 1 ? 1 : n > mx ? mx : n;
-                    x->gate = (uint8_t)(n * 6 - 1); proj_edited();
-                }
+            ed_hold_st = ed_hold_k >= 0 ? (int32_t)ed_hold_step : -1;
+            for (k = 0; k < 4u; k++) {                  /* the knobs: the layer ENV picked (stepx.c); layer 1's KNOB 1 is the tempo */
+                e = fm1_enc_take(ENC_KNOB1 + k);
+                if (!e || sel >= chan_n) continue;
+                if (ed_layer == 0u && k == 0u) { int32_t v = (int32_t)seq_bpm + e; seq_bpm = (uint32_t)(v < 40 ? 40 : v > 240 ? 240 : v); proj_edited(); anim_tempo(); }
+                else ed_knob(sel, ed_hold_k >= 0 ? ed_hold_step : ed_cur, k, e);
+                ed_strip_t = fm1_ms;
             }
-            for (k = 2; k < 4u; k++) fm1_enc_take(ENC_KNOB1 + k);
+            {   static uint32_t env_was, env_key;      /* ENV: a tap turns the layer (held with a white key on the drum lanes it is the accent) */
+                const uint32_t en = fm1_in.buttons >> BTN_ENV & 1u;
+                if (en && keys) env_key = 1;
+                if (!en && env_was && !env_key) { ed_layer = (ed_layer + 1u) % 3u; ed_strip_t = fm1_ms; }
+                if (!en) env_key = 0;
+                env_was = en;
+            }
+            {   static uint32_t sw, st0, used;         /* SEL: copy the channel's page; held: paste it */
+                const uint32_t sn = fm1_in.buttons >> BTN_SEL & 1u;
+                if (sn && !sw) { st0 = fm1_ms; used = 0; }
+                if (sn && !used && fm1_ms - st0 >= 600u && sel < chan_n) { used = 1; if (ed_paste(sel) == 0) anim_start(AN_COPY, (uint32_t)seq_view + 1u); }
+                if (!sn && sw && !used && sel < chan_n) { ed_copy(sel); anim_start(AN_SAVE, 0); }
+                sw = sn;
+            }
             if ((b & (1u << BTN_EDIT)) && sel < chan_n && IS_DRUM(chan[sel].kind)) {         /* drums: EDIT clears the picked drum on this page */
                 uint32_t p, any = 0;
                 for (p = 0; p < SEQ_LEN; p++) { step_t *x = &pat[seq_view][sel][p]; uint32_t h = dstep_hits(x); if (h >> ed_lane & 1u) { dstep_set(x, h & ~(1u << ed_lane), dstep_acc(x) & ~(1u << ed_lane)); any = 1; } }
                 if (any) proj_edited();
             }
-            else if ((b & (1u << BTN_EDIT)) && sel < chan_n) { step_t *x = &pat[seq_view][sel][ed_cur]; if (x->note) { x->note = 0; proj_edited(); } }
+            else if ((b & (1u << BTN_EDIT)) && sel < chan_n) { step_t *x = &pat[seq_view][sel][ed_cur]; if (x->note) { x->note = 0; x->spare = 0; sx_clear_step(seq_view, sel, ed_cur); proj_edited(); } }
             if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; dirty = 1; t_change = fm1_ms; }
             if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; dirty = 1; t_change = fm1_ms; }
             if ((uint32_t)(set.oct + 2) != oct_was) anim_cont(AN_OCT, oct_was << 4 | (uint32_t)(set.oct + 2), 900u);

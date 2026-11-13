@@ -1,0 +1,30 @@
+# STEP view extras: a chord from two keys held, ratchet, the layers (ENV), chance, slide, lock; copy and paste (SEL)
+300 held 0x100
+350 held 0
+600 btn 11
+700 enc 0 1
+700 enc 0 -1
+800 keys 0x80
+900 keys 0x880
+950 keys 0x4880
+1000 shot
+1100 keys 0
+1150 enc 0 -1
+1160 enc 0 -1
+1170 enc 0 -1
+1200 enc 5 2
+1300 enc 4 -3
+1500 shot
+1600 held 0x10
+1650 held 0
+1700 enc 2 2
+1750 enc 3 3
+1800 enc 4 1
+1900 shot
+2000 held 0x10
+2050 held 0
+2100 enc 2 3
+2200 enc 3 1
+2300 enc 5 2
+2400 shot
+2500 end
