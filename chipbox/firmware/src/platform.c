@@ -29,6 +29,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #define PROJ_SLOTS 12u
 #define PROJ_DEMOS 2u                           /* the first two slots are the demos: Korobeiniki and the console symphony */
 #define PROJ_LEN (PROJ_SLOTS * 2u * PROJ_BANK)
+#define PATCH_AT (PROJ_AT + PROJ_LEN)                 /* the user patches (patch.c): the 4 KB sector after the projects, the last of Felucca's data area */
 
 #ifdef CHIPBOX_HOST
 #include "../../tests/host.c"                  /* on a computer: a fake FM-1 (tests/host.c) */

@@ -6,6 +6,7 @@
 #include "../firmware/src/chipbox.c"
 #undef main
 #include <math.h>
+#include <time.h>
 
 static int fails;
 static void check(int ok, const char *what, double got, double want)
@@ -179,6 +180,34 @@ int main(void)
     ev_do(EV_ON, (uint32_t)c, 60, 127); render(44100);
     { int32_t mx = 0; for (i = 0; i < 2u * snd_n; i++) { int32_t v = snd[i] < 0 ? -snd[i] : snd[i]; if (v > mx) mx = v; } check(mx > 1000 && mx <= 32767, "ensemble + drive + resonance: peak", mx, 20000); }
     a = rms(22050, 44100, 0); b = rms(22050, 44100, 1); check(a > 100 && b > 100, "ensemble: both sides", b / a, 1.0);
+
+    /* 11. every factory patch plays a chord: not silent, not clipped */
+    for (i = 0; i < PRESETS; i++) {
+        int32_t mx = 0; uint32_t j; char what[64];
+        fresh(120);
+        c = chan_add(KD_NES_PU); chan_add(KD_NES_PU); chan_add(KD_NES_PU); preset_apply(i, (uint32_t)c);
+        chan[c].x.chv = 2;
+        note_at(0, (uint32_t)c, 0, 57, 40); sx_put(0, (uint32_t)c, 0, 0, 2);       /* A minor */
+        seq_play(0, 1); render(44100);
+        for (j = 0; j < 2u * snd_n; j++) { int32_t v = snd[j] < 0 ? -snd[j] : snd[j]; if (v > mx) mx = v; }
+        snprintf(what, sizeof what, "preset %-14s peak", PRESET_NAME[i]);
+        check(mx > 1500 && mx < 32000, what, mx, 12000);
+    }
+
+    /* 12. the cost: a heavy synthwave setup against the demo's four chips (host time, a rough guide only) */
+    {   clock_t t0; double base, heavy; uint32_t r;
+        fresh(120); seq_tetris(); seq_play(0, 0);
+        t0 = clock(); for (r = 0; r < 20u; r++) { snd_n = 0; render(44100 / 2); } base = (double)(clock() - t0);
+        fresh(120);
+        c = chan_add(KD_VA); preset_apply(PR_JUNOPAD, (uint32_t)c);
+        ev_do(EV_ON, (uint32_t)c, 57, 100); ev_do(EV_ADD, (uint32_t)c, 60, 100); ev_do(EV_ADD, (uint32_t)c, 64, 100); ev_do(EV_ADD, (uint32_t)c, 67, 100);
+        c = chan_add(KD_VA); preset_apply(PR_SAWLEAD, (uint32_t)c); ev_do(EV_ON, (uint32_t)c, 69, 100);
+        c = chan_add(KD_VA); preset_apply(PR_BASSPL, (uint32_t)c); ev_do(EV_ON, (uint32_t)c, 33, 100);
+        c = chan_add(KD_SNES); preset_apply(PR_SNSTR, (uint32_t)c); ev_do(EV_ON, (uint32_t)c, 57, 100); ev_do(EV_ADD, (uint32_t)c, 64, 100);
+        mset.comp = 6; mset.sat = 3;
+        t0 = clock(); for (r = 0; r < 20u; r++) { snd_n = 0; render(44100 / 2); } heavy = (double)(clock() - t0);
+        printf("info  cost: heavy synthwave setup / demo song = %.1fx (host; the FM-1 shows its own CPU %% as MIDI CC 100)\n", heavy / (base > 0 ? base : 1));
+    }
 
     printf(fails ? "%d FAILED\n" : "all ok\n", fails);
     return fails ? 1 : 0;

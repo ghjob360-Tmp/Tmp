@@ -1,0 +1,34 @@
+# the patches: hold SEL on the chip screen, load a factory one (OCT+), save into a user slot (SAVE)
+300 held 0x100
+350 held 0
+600 midi 0xB0 106 0
+1000 enc 6 1
+1050 enc 6 1
+1100 enc 6 1
+1150 enc 6 1
+1300 held 0x100
+1350 held 0
+1600 held 0x8
+2300 held 0
+2400 shot
+2500 enc 0 1
+2600 btn 1
+2700 shot
+2800 keys 0x80
+3300 keys 0
+3400 enc 0 1
+3410 enc 0 1
+3420 enc 0 1
+3430 enc 0 1
+3440 enc 0 1
+3450 enc 0 1
+3460 enc 0 1
+3470 enc 0 1
+3480 enc 0 1
+3490 enc 0 1
+3500 enc 0 1
+3600 btn 9
+3700 shot
+3800 btn 0
+4000 shot
+4100 end

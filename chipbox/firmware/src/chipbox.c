@@ -456,6 +456,7 @@ static void draw_note(const theme_t *t, uint32_t note)
 #include "mixview.c"
 #include "menu.c"
 #include "addmenu.c"
+#include "patch.c"
 #include "manual.c"
 #include "tips.c"
 #include "picker.c"
@@ -676,6 +677,12 @@ static void app_main(void)
         edit_rel = !edit_now && edit_was;
         if (edit_now && !edit_was) { edit_t0 = fm1_ms; edit_used = 0; }
         edit_was = edit_now;
+        if (patch_on && (menu_on || pick_on || view != 0u || sel >= chan_n)) patch_on = 0;
+        if (patch_on) {                                 /* the patch list: it takes the knobs and buttons (patch.c); the keys still play */
+            patch_input(b, home_tap, sel);
+            if (!patch_on) { rack_force = 1; chip_drawn = ~0u; redraw = 1; }
+            b = 0; home_tap = 0;
+        }
         if (pick_on) {                                  /* the projects: SELECT moves, OCT+ yes, OCT- no, hold EDIT to clear one */
             e = fm1_enc_take(ENC_SELECT);
             if (!e) e = fm1_enc_take(ENC_PRESETS);
@@ -771,6 +778,7 @@ static void app_main(void)
             uint32_t sn = fm1_in.buttons >> BTN_SEL & 1u;
             if (sn && !dup_was) { dup_t0 = fm1_ms; dup_used = 0; }
             dup_was = sn;
+            if (sn && !dup_used && view == 0u && sel < chan_n && !IS_DRUM(chan[sel].kind) && !menu_on && !pick_on && !fx_layer && !patch_on && fm1_ms - dup_t0 >= 600u) { dup_used = 1; patch_open(); }       /* hold SEL on the chip screen: the patches */
             if (sn && !dup_used && view == 1u && sel < chan_n && !menu_on && !pick_on && !fx_layer && !rack_rm && fm1_ms - dup_t0 >= 600u) {
                 dup_used = 1;
                 if (chan_n < MAXCH) { menu_open_pick(COPY_MENU, sizeof COPY_MENU / sizeof COPY_MENU[0]); menu_kind = MK_COPY; }       /* a window: patch only, patch and notes, cancel */
@@ -1256,6 +1264,7 @@ static void app_main(void)
         if (pass == 0u) { menu_on = 0; tip_on = 0; gfx_dim = 1; gfx_dim_bg = view == 0u && sel < chan_n ? t->bg : R_BG; rack_force = 1; chip_drawn = ~0u; redraw = 1; ch_drawn = 99; }
         else { menu_on = m0; tip_on = t0; gfx_dim = 0; if (dpass) dim_done = 1; }
         if (pick_on) { if (pick_dirty) { pick_draw(); pick_dirty = 0; } }
+        else if (patch_on) { if (patch_dirty || redraw) { patch_draw(); patch_dirty = 0; redraw = 0; } }
         else if (menu_on) { if (menu_dirty) { menu_draw(t->acc); menu_dirty = 0; }      /* (the three bands cover the whole screen: no clear first, that was the flash) */ }
         else if (tip_on) { if (tip_dirty) { tip_draw(); tip_dirty = 0; } }          /* the window stays; the view under it waits */
         else if (fx_layer) {

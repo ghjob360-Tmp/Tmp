@@ -64,14 +64,17 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 /* the projects' flash: erase sets 1s, a write can only clear bits (as the real part: a missing erase shows up), kept in $HOST_FLASH between runs */
 static uint8_t host_flash[PROJ_LEN];
 static uint32_t host_gen;                       /* counts writes: the browser page saves the flash when it changes */
+static uint8_t host_patch[0x1000];              /* the user patches' sector (patch.c), kept with the flash */
 static int pf_read(uint32_t off, void *dst, uint32_t n)
 {
+    if (off >= PATCH_AT && off + n <= PATCH_AT + 0x1000u) { memcpy(dst, host_patch + (off - PATCH_AT), n); return 0; }
     if (off < PROJ_AT || off + n > PROJ_AT + PROJ_LEN) return -1;
     memcpy(dst, host_flash + (off - PROJ_AT), n);
     return 0;
 }
 static int pf_erase(uint32_t off)
 {
+    if (off == PATCH_AT) { memset(host_patch, 0xFF, sizeof host_patch); host_gen++; return 0; }
     if (off < PROJ_AT || off + 0x1000u > PROJ_AT + PROJ_LEN || (off & 0xFFFu)) return -1;
     memset(host_flash + (off - PROJ_AT), 0xFF, 0x1000u);
     host_gen++;
@@ -80,6 +83,7 @@ static int pf_erase(uint32_t off)
 static int pf_write(uint32_t off, const void *p, uint32_t n)
 {
     uint32_t i;
+    if (off >= PATCH_AT && off + n <= PATCH_AT + 0x1000u) { for (i = 0; i < n; i++) host_patch[off - PATCH_AT + i] &= ((const uint8_t *)p)[i]; host_gen++; return 0; }
     if (off < PROJ_AT || off + n > PROJ_AT + PROJ_LEN) return -1;
     for (i = 0; i < n; i++) host_flash[off - PROJ_AT + i] &= ((const uint8_t *)p)[i];
     host_gen++;
@@ -90,10 +94,10 @@ static void host_flash_io(int save)             /* the projects' flash and the s
 {
     const char *path = getenv("HOST_FLASH");
     FILE *f = path ? fopen(path, save ? "wb" : "rb") : 0;
-    if (f && save) { fwrite(host_flash, 1, sizeof host_flash, f); fwrite(host_store, 1, sizeof host_store, f); }
+    if (f && save) { fwrite(host_flash, 1, sizeof host_flash, f); fwrite(host_store, 1, sizeof host_store, f); fwrite(host_patch, 1, sizeof host_patch, f); }
     else if (!f || fread(host_flash, 1, sizeof host_flash, f) != sizeof host_flash || fread(host_store, 1, sizeof host_store, f) != sizeof host_store) {
-        memset(host_flash, 0xFF, sizeof host_flash); memset(host_store, 0, sizeof host_store);
-    }
+        memset(host_flash, 0xFF, sizeof host_flash); memset(host_store, 0, sizeof host_store); memset(host_patch, 0xFF, sizeof host_patch);
+    } else if (fread(host_patch, 1, sizeof host_patch, f) != sizeof host_patch) memset(host_patch, 0xFF, sizeof host_patch);     /* (a file from before the patches) */
     if (f) fclose(f);
 }
 static int settings_load(void *p, uint32_t n)
@@ -151,6 +155,8 @@ EMSCRIPTEN_KEEPALIVE uint8_t *web_flash(void) { return host_flash; }
 EMSCRIPTEN_KEEPALIVE uint32_t web_flash_len(void) { return sizeof host_flash; }
 EMSCRIPTEN_KEEPALIVE uint8_t *web_store(void) { return host_store; }
 EMSCRIPTEN_KEEPALIVE uint32_t web_store_len(void) { return sizeof host_store; }
+EMSCRIPTEN_KEEPALIVE uint8_t *web_patch(void) { return host_patch; }
+EMSCRIPTEN_KEEPALIVE uint32_t web_patch_len(void) { return sizeof host_patch; }
 EMSCRIPTEN_KEEPALIVE uint32_t web_flash_gen(void) { return host_gen; }
 EMSCRIPTEN_KEEPALIVE uint8_t *web_leds(void) { return host_led; }
 EMSCRIPTEN_KEEPALIVE void web_start(void) { web_go = 1; }
@@ -176,7 +182,7 @@ EMSCRIPTEN_KEEPALIVE int32_t *web_audio(void)    /* one block of HALF_FRAMES ste
 }
 int main(void)
 {
-    memset(host_flash, 0xFF, sizeof host_flash); memset(host_store, 0, sizeof host_store);
+    memset(host_flash, 0xFF, sizeof host_flash); memset(host_store, 0, sizeof host_store); memset(host_patch, 0xFF, sizeof host_patch);
     while (!web_go) emscripten_sleep(20);        /* the page puts the saved projects in first */
     app_main();
     return 0;

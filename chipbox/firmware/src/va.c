@@ -316,7 +316,8 @@ static void r_va(int32_t *out, uint32_t n, const uint8_t *act, uint32_t na)
     for (a = 0; a < na; a++) {
         const uint32_t c = act[a], p = va_poly(c), u = va_uni(c), kind = chan[c].kind;
         const ext_t *x = &chan[c].x;
-        const uint32_t pw = 0x80000000u + (uint32_t)x->va[VA_PW] * 0x7000000u, pan = vc[c].in.pan > 2u ? 1u : vc[c].in.pan;
+        const int32_t pwi = (int32_t)x->va[VA_PW] * 7 + (x->ltgt == LT_PWM ? vc[c].lfo2 * (int32_t)x->ldep / 40 : 0);        /* the width: 50 % .. 5 %, the LFO swinging it */
+        const uint32_t pw = 0x80000000u + (uint32_t)(pwi < 0 ? 0 : pwi > 110 ? 110 : pwi) * 0x1000000u, pan = vc[c].in.pan > 2u ? 1u : vc[c].in.pan;
         const int32_t m2 = x->va[VA_W2] < 3u ? (int32_t)x->va[VA_MIX] * 17 : 0, ms = (int32_t)x->va[VA_SUB] * 17, mn = (int32_t)x->va[VA_NOISE] * 12;
         const int32_t sp = (int32_t)x->va[VA_SPR];
         if (kind != KD_VA && !bank_ready) continue;
