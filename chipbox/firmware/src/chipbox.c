@@ -653,7 +653,8 @@ static void app_main(void)
             if ((up >> k & 1u) && held_ch[k] == 255u) { add_key_off(held[k]); held_ch[k] = 0; }
             else if (up >> k & 1u) {
                 if ((int32_t)k == ed_hold_k) ed_hold_k = -1;
-                if (held_ch[k] < chan_n && last_note == held[k]) chip_off(held_ch[k]);
+                if (held_ch[k] < chan_n && is_va(chan[held_ch[k]].kind) && va_poly(held_ch[k]) > 1u) chip_off_note(held_ch[k], held[k]);       /* a chord on a channel that plays chords: just this key */
+                else if (held_ch[k] < chan_n && last_note == held[k]) chip_off(held_ch[k]);
                 midi_send(0x80 | (held_ch[k] & 15u), held[k], 0);
                 if (rec_hold[k]) {                      /* a recorded note: its length is how long the key was down */
                     step_t *x = &pat[rec_pg[k]][rec_ch[k]][rec_st[k]];

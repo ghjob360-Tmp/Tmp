@@ -8,6 +8,20 @@ Chiptune 'grovebox' thing for the FM-1, with more that 35 sound chips!
 <img src="site/img/fm.png" width="32%"> <img src="site/img/sid.png" width="32%"> <img src="site/img/fds.png" width="32%">
 </p>
 
+## Synthwave edition (this fork)
+
+Everything above still works the same, and old projects sound identical. Added (full guide in Traditional Chinese: [SYNTHWAVE.md](SYNTHWAVE.md)):
+
+- **New voices**: VA Synth (supersaw up to 7 copies, PWM, sub, noise, 4-note poly), SNES (BRR + gaussian sampler), Amiga (Paula 8-bit sampler), 15 instruments synthesized into RAM.
+- **Every channel**: filter (LP/BP/HP/LP24 with envelope), drive, glide, a second LFO (pitch, cutoff, level, pan, PWM; free or in time), ensemble/unison, sends to chorus, delay and reverb.
+- **Arp**: 22 chords plus a USER chord, 1-4 octaves, 6 directions, tempo-synced rates including triplets, gate.
+- **Sequencer**: per-channel speed (1/16T, 1/8T ... triplets) and length (polymeter), ratchet, nudge, chance, slide, chord steps, parameter locks, swing.
+- **MIX view** (HOME after SONG): Juno-style chorus, synced/ping-pong delay, reverb with a gate, compressor, saturation, sidechain shape, scale lock for the keys.
+- **Workflow**: redo (ENV + LFO), copy/paste a channel's page (SEL / hold SEL in STEP), patch library with 12 synthwave presets and 31 user slots (hold SEL on the chip screen), Record WAV in the web player.
+- Project format version 6 (older Chipbox firmware can't open projects saved by this one).
+
+Not yet tested on a real FM-1: build the `.fwsc` with the `chipbox` GitHub workflow (run it by hand) or `./build.sh`, and watch the CPU (MIDI CC 100).
+
 ## What is it
 
 A simple (to me) workflow for making music.
