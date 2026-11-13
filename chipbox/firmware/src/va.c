@@ -123,7 +123,7 @@ static int32_t harm(uint32_t i, const uint8_t *amp, uint32_t nh, uint32_t cyc)  
 }
 static void bank_make(void)                     /* (main loop: about a tenth of a second, once) */
 {
-    static int16_t w[6144];
+    int16_t *const w = (int16_t *)cv_px;        /* (6144 samples of scratch: the screen's canvas, which nothing draws in while this runs) */
     static const uint8_t SAW[40] = {255, 128, 85, 64, 51, 42, 36, 32, 28, 25, 23, 21, 19, 18, 17, 16, 15, 14, 13, 12, 12, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6, 6, 6};
     uint8_t a[40];
     uint32_t s, i, h, n;

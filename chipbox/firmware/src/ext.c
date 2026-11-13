@@ -33,7 +33,7 @@ static uint32_t arp_offset_x(uint32_t c, uint32_t shape, uint32_t dir, uint32_t 
 enum { SXF_CHORD = 15, SXF_SLIDE = 16, SXF_LOCK = 32 };
 typedef struct { uint16_t key; uint8_t lock, fl; } sx_t;          /* key: page << 8 | channel << 4 | step; fl: chord (4 bits), slide, lock set */
 static sx_t sx[SX_MAX];
-static volatile uint32_t sx_n, sx_busy;
+static volatile uint32_t sx_n, stx_busy;
 #define SX_KEY(p, c, s) ((uint16_t)((p) << 8 | (c) << 4 | (s)))
 static int32_t sx_find(uint32_t key)            /* the entry's index, or -(where it would go) - 1 */
 {
@@ -48,7 +48,7 @@ static int32_t sx_find(uint32_t key)            /* the entry's index, or -(where
 static const sx_t *sx_get(uint32_t p, uint32_t c, uint32_t s)       /* (the audio side: nothing while the main loop moves the table) */
 {
     int32_t i;
-    if (!sx_n || sx_busy) return 0;
+    if (!sx_n || stx_busy) return 0;
     i = sx_find(SX_KEY(p, c, s));
     return i >= 0 ? &sx[i] : 0;
 }
@@ -56,17 +56,17 @@ static int sx_put(uint32_t p, uint32_t c, uint32_t s, uint32_t lock, uint32_t fl
 {
     const uint32_t key = SX_KEY(p, c, s);
     int32_t i = sx_find(key);
-    sx_busy = 1;
+    stx_busy = 1;
     if (i >= 0) {
         if (fl) { sx[i].lock = (uint8_t)lock; sx[i].fl = (uint8_t)fl; }
         else { memmove(&sx[i], &sx[i + 1], (sx_n - (uint32_t)i - 1u) * sizeof sx[0]); sx_n--; }
     } else if (fl) {
-        if (sx_n >= SX_MAX) { sx_busy = 0; return -1; }
+        if (sx_n >= SX_MAX) { stx_busy = 0; return -1; }
         i = -i - 1;
         memmove(&sx[i + 1], &sx[i], (sx_n - (uint32_t)i) * sizeof sx[0]);
         sx[i].key = (uint16_t)key; sx[i].lock = (uint8_t)lock; sx[i].fl = (uint8_t)fl; sx_n++;
     }
-    sx_busy = 0;
+    stx_busy = 0;
     return 0;
 }
 static uint32_t sx_fl(uint32_t p, uint32_t c, uint32_t s) { int32_t i = sx_n ? sx_find(SX_KEY(p, c, s)) : -1; return i >= 0 ? sx[i].fl : 0u; }
@@ -75,14 +75,14 @@ static void sx_clear_step(uint32_t p, uint32_t c, uint32_t s) { sx_put(p, c, s, 
 static void sx_sort(void)                       /* after keys were rewritten in place: in order again (insertion sort, the table is small) */
 {
     uint32_t i, j;
-    sx_busy = 1;
+    stx_busy = 1;
     for (i = 1; i < sx_n; i++) { sx_t t = sx[i]; for (j = i; j > 0u && sx[j - 1u].key > t.key; j--) sx[j] = sx[j - 1u]; sx[j] = t; }
-    sx_busy = 0;
+    stx_busy = 0;
 }
 static void sx_chan_removed(uint32_t c)         /* the channel's entries go; those of the channels above move down */
 {
     uint32_t i, w = 0;
-    sx_busy = 1;
+    stx_busy = 1;
     for (i = 0; i < sx_n; i++) {
         const uint32_t k = sx[i].key, kc = k >> 4 & 15u;
         if (kc == c) continue;
@@ -91,7 +91,7 @@ static void sx_chan_removed(uint32_t c)         /* the channel's entries go; tho
         w++;
     }
     sx_n = w;
-    sx_busy = 0;
+    stx_busy = 0;
 }
 static void sx_copy_chan(uint32_t from, uint32_t to, uint32_t pages)   /* channel `to` gets `from`'s extras (its notes were copied) */
 {
@@ -109,10 +109,10 @@ static void sx_copy_page(uint32_t from, uint32_t to)
 static void sx_rotate(uint32_t p, uint32_t c, int32_t sh)       /* the rack's knob 3 slid this channel's steps: the extras go with them */
 {
     uint32_t i;
-    sx_busy = 1;
+    stx_busy = 1;
     for (i = 0; i < sx_n; i++)
         if ((sx[i].key >> 8) == p && (sx[i].key >> 4 & 15u) == c) sx[i].key = (uint16_t)((sx[i].key & 0xFFF0u) | (uint32_t)(((int32_t)(sx[i].key & 15u) + sh) & 15));
-    sx_busy = 0;
+    stx_busy = 0;
     sx_sort();
 }
 

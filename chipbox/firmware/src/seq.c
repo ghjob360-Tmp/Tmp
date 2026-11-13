@@ -320,7 +320,7 @@ static void seq_clear(void)                     /* an empty project: no channels
     chan_n = 0;
     memset(pat, 0, sizeof pat);
     memset(tr, 0, sizeof tr);
-    sx_busy = 1; sx_n = 0; sx_busy = 0;
+    stx_busy = 1; sx_n = 0; stx_busy = 0;
     mset = MSET_DEF;
     page_n = 1; seq_view = 0; seq_pat = 0; seq_next = 255; seq_step = seq_sub = 0; seq_slot = 0; seq_loop = 0; seq_follow = 0;
     song_len = 1; memset(song, 0, sizeof song);

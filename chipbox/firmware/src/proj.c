@@ -72,12 +72,12 @@ static void proj_unpack_x(const uint8_t *p, uint32_t n, uint32_t len, uint32_t c
         if (p[n] < page_n && p[n + 1u] < chans && p[n + 2u] < SEQ_LEN) pat[p[n]][p[n + 1u]][p[n + 2u]].spare = p[n + 3u];
     if (n + 2u > len) return;
     cnt = (uint32_t)p[n] | (uint32_t)p[n + 1u] << 8; n += 2u;
-    sx_busy = 1;
+    stx_busy = 1;
     for (i = 0; i < cnt && n + 4u <= len && sx_n < SX_MAX; i++, n += 4u) {
         const uint32_t key = (uint32_t)p[n] | (uint32_t)p[n + 1u] << 8;
         if ((key >> 8) < page_n && (key >> 4 & 15u) < chans && p[n + 3u]) { sx[sx_n].key = (uint16_t)key; sx[sx_n].lock = p[n + 2u]; sx[sx_n].fl = p[n + 3u]; sx_n++; }
     }
-    sx_busy = 0;
+    stx_busy = 0;
     sx_sort();
 }
 static uint32_t proj_pack(uint8_t *p)           /* the project to bytes: the length, or 0 when it does not fit a bank */
