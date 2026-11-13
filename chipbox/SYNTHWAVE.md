@@ -3,7 +3,7 @@
 這份是 Chipbox 擴充版的使用說明，原版的操作全部不變。
 舊專案打開來聲音和原版**完全一樣**（有自動測試逐樣本比對過）。新設定的預設值都等於「原本的行為」。
 
-> 狀態：程式碼已經在電腦版（host build）上編譯並測試過，**還沒在 FM-1 實機上跑過**。
+> 狀態：`.fwsc` 和 `.rfm1` 都已編譯（放在 `dist/`），電腦版測試全部通過，**還沒在 FM-1 實機上跑過**。
 > 實機請先用 USB 接著看 CPU：裝置會用 MIDI CC 100 回報 CPU %。詳見文末的「實機注意事項」。
 
 ---
@@ -95,9 +95,10 @@
 
 ## 7. 實機注意事項（請先看）
 
-1. **還沒有實機測試。** 這個環境裡我沒辦法安裝 JieLi 工具鏈。要編出 `.fwsc` 可以用以下任一方式：
-   - 在 GitHub Actions 手動執行 `chipbox` workflow（Actions → chipbox → Run workflow），完成後會把 `.fwsc` 當成 artifact 上傳。
-   - 在自己的 Linux 上依照 `README.md` 執行 `./build.sh`。
+1. **已編譯，但還沒有實機測試。** 現成的檔案在 `dist/`：
+   - `chipbox-1.6.1-synthwave.fwsc`：FM-1 安裝包。用安裝頁面或 `tools/fm1_install.py` 燒進去。
+   - `chipbox-1.6.1-synthwave.rfm1`：RemoteFM1 用。在 remotefm1.com 選「Open a file…」，或放進 App 的韌體資料夾。
+   - 要自己重編：`.fwsc` 執行 `./build.sh`；`.rfm1` 執行 `rfm1/build_rfm1.sh`（說明見 `rfm1/README.md`）。也可以在 GitHub Actions 手動執行 `chipbox` workflow。
 2. **CPU。** 這個「重」配置在電腦上大約是原版 demo 的 3.8 倍：
    - 4 音 Juno pad
    - supersaw lead
@@ -106,10 +107,8 @@
    - 開著 chorus、reverb、壓縮
 
    請在實機上監看 CC 100。爆音的話，降低 POLY、UNISON、WIDE 副本數，或少開幾個頻道的 FILTER。
-3. **記憶體**（32 位元估算）：
-   - pool 用了 337,808／344,064 bytes
-   - RAM（.data＋.bss）約 81 KB／96 KB
-   - 程式碼加常數比原版多約 45 KB，flash 應該放得下，但要以實際 build 的報告為準。
+3. **記憶體**：
+   - 實際 build：app 415,236／581,564 bytes；RAM（.data＋.bss）87,968／98,304 bytes；pool 337,808／344,064 bytes。
 4. **Brothers Link**：swing 只作用在自己內部的時脈；跟隨外部時脈時不套用 swing。
 
 ## 測試
