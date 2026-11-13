@@ -3,7 +3,7 @@
  * Written in the manual's voice: a verb and an object in every sentence, the reader left out. Included by manual.c after the page type. When a chip gets a knob, add it to its page here. */
 #define DK (M_KNOBS | M_SMALL)
 static const mpage_t DOC_ENV = {"Envelope", DK, "Turn KNOB 1 for the attack, KNOB 2 for the decay, KNOB 3 for the level it falls to and KNOB 4 for the release."};
-static const mpage_t DOC_ARP = {"Arp", DK, "Turn KNOB 1 to pick a chord, KNOB 2 for the speed and KNOB 3 for the direction. Turn KNOB 4 for the vibrato speed."};
+static const mpage_t DOC_ARP = {"Arp", DK, "Turn KNOB 1 to pick a chord, KNOB 2 for the speed (from 1/4 it keeps time) and KNOB 3 for the direction. Turn KNOB 4 for the vibrato speed."};
 
 /* ---- the FM chips: a page for the channel's pages, then each operator page (what the screen shows for them) */
 static const mpage_t DOC_OPM[] = {
@@ -139,10 +139,29 @@ static const mpage_t DOC_DRUM[] = {
     {"Accents", M_ENV | M_EDIT | M_SMALL, "Hold ENV and press a white key to place an accent. Press EDIT to clear the drum you picked."},
 };
 
+/* the extra pages (epages.c), in EPG order */
+static const mpage_t DOC_EP[EPGS] = {
+    {"Arp+", DK, "Turn KNOB 1 for the arp's octaves, 1 to 4, and KNOB 2 for its gate. KNOB 3 and 4 set the USER chord's two notes above the root."},
+    {"Filter", DK, "Turn KNOB 1 for the type: LP, BP, HP or LP24. Turn KNOB 2 for the cutoff, KNOB 3 for resonance and KNOB 4 for how far the envelope moves it."},
+    {"Shape", DK, "Turn KNOB 1 for how fast the filter envelope falls, KNOB 2 for key tracking, KNOB 3 for drive and KNOB 4 for glide between notes."},
+    {"LFO", DK, "Turn KNOB 1 to pick what the LFO moves: pitch, cutoff, level, pan or pulse width. KNOB 2 sets its rate, free or in time; KNOB 3 its depth, KNOB 4 its shape."},
+    {"Wide", DK, "Turn KNOB 1 for 2 to 4 copies of the sound that drift out of tune. Turn KNOB 2 for how far they drift and KNOB 3 to spread them left to right."},
+    {"Sends", DK, "Turn KNOB 1, 2 and 3 to send the channel to the chorus, the delay and the reverb. Set the effects on the MIX view."},
+    {"Steps", DK, "Turn KNOB 1 for the channel's speed: 1/16T or 1/8T for triplets. KNOB 2 sets how many steps it loops, KNOB 3 what a step's lock moves, KNOB 4 its chord voices."},
+    {"Oscillators", DK, "Turn KNOB 1 and 2 for the two waves. Turn KNOB 3 to tune the second one in semitones and KNOB 4 to detune it a little."},
+    {"Mix", DK, "Turn KNOB 1 for the second oscillator's level, KNOB 2 for the sub an octave down, KNOB 3 for noise and KNOB 4 for the pulse width."},
+    {"Voice", DK, "Turn KNOB 1 for up to seven saws at once, KNOB 2 to detune them and KNOB 3 to spread them. Turn KNOB 4 to play up to four notes at once."},
+    {"Sample", DK, "Turn KNOB 1 to pick an instrument. Turn KNOB 2 and 3 to tune it. Turn KNOB 4 to play up to four notes at once. It plays two octaves over its root at most."},
+    {"Sample", DK, "Turn KNOB 1 to pick an instrument. Turn KNOB 2 to tune it and KNOB 3 for the LED filter. Turn KNOB 4 to play up to four notes at once."},
+};
+static const mpage_t DOC_VA[] = {TONE("Tone", "Turn KNOB 1 to pick the first wave: saw, pulse, triangle or sine. Turn KNOB 2 for the level, KNOB 3 for the vibrato and KNOB 4 to pan.")};
+static const mpage_t DOC_SMP[] = {TONE("Tone", "Turn KNOB 1 to pick an instrument: strings, choir, brass, piano and more. Turn KNOB 2 for the level, KNOB 3 for the vibrato and KNOB 4 to pan.")};
+static void man_add(const mpage_t *p);
+static void man_add_ep(uint32_t kind) { uint8_t l[16]; uint32_t n = ep_list_k(kind, l), i; for (i = 0; i < n; i++) man_add(&DOC_EP[l[i]]); }
 #define DOCB(a) a, (uint8_t)(sizeof a / sizeof a[0])
-static mpage_t man_cdoc[20];                                       /* the chapter being shown: the chip's pages, then the general ones */
+static mpage_t man_cdoc[32];                                       /* the chapter being shown: the chip's pages, then the general ones */
 static uint32_t man_pn;
-static void man_add(const mpage_t *p) { if (man_pn < 20u) man_cdoc[man_pn++] = *p; }
+static void man_add(const mpage_t *p) { if (man_pn < 32u) man_cdoc[man_pn++] = *p; }
 static void man_addn(const mpage_t *p, uint32_t n) { uint32_t i; for (i = 0; i < n; i++) man_add(&p[i]); }
 static uint32_t man_chip_pages(uint32_t kind, uint32_t *at, uint32_t chip_page, uint32_t foc)      /* builds man_cdoc for this kind; the page to open at (the knob page on the screen); the page count */
 {
@@ -162,7 +181,8 @@ static uint32_t man_chip_pages(uint32_t kind, uint32_t *at, uint32_t chip_page, 
         }
         no = n - 1u - nc;
         man_addn(t, n);
-        *at = foc ? 1u + nc + (chip_page < no ? chip_page : 0u) : 1u + (chip_page < nc ? chip_page : 0u);
+        man_add_ep(kind);                                               /* the extra pages, after the operators' */
+        *at = foc ? 1u + nc + (chip_page < no ? chip_page : 0u) : chip_page < nc ? 1u + chip_page : n + (chip_page - nc);
     } else {
         const mpage_t *t = 0, *x1 = 0, *x2 = 0, *x3 = 0;
         switch (kind) {
@@ -196,9 +216,11 @@ static uint32_t man_chip_pages(uint32_t kind, uint32_t *at, uint32_t chip_page, 
         case KD_SPK: t = DOC_SPK; break;
         case KD_ZX: t = DOC_ZX; break;
         case KD_SID: t = DOC_SID; x1 = &DOC_SIDP; x2 = &DOC_SIDF; break;
+        case KD_VA: t = DOC_VA; break;
+        case KD_SNES: case KD_AMIGA: t = DOC_SMP; break;
         default: t = 0; break;
         }
-        if (IS_DRUM(kind)) { man_addn(DOC_DRUM, sizeof DOC_DRUM / sizeof DOC_DRUM[0]); *at = 0; }
+        if (IS_DRUM(kind)) { man_addn(DOC_DRUM, sizeof DOC_DRUM / sizeof DOC_DRUM[0]); man_add_ep(kind); *at = chip_page ? 3u + chip_page - 1u : 0u; }
         else {
             man_add(t ? &t[0] : &DOC_NESP[0]);
             man_add(kind == KD_SID ? &DOC_SIDE : &DOC_ENV); man_add(&DOC_ARP);
@@ -214,6 +236,7 @@ static uint32_t man_chip_pages(uint32_t kind, uint32_t *at, uint32_t chip_page, 
             case KD_FDS: man_add(&DOC_DRFD); man_add(&DOC_DRAW2); break;
             default: break;
             }
+            man_add_ep(kind);
             *at = chip_page < man_pn ? chip_page : 0u;
         }
     }

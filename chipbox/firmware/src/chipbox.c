@@ -726,6 +726,7 @@ static void app_main(void)
             if (menu_on && menu_kind == MK_MANUAL) man_glo();
             else if (menu_on) { menu_on = 0; rack_force = 1; chip_drawn = ~0u; }
             else if (fx_layer) man_open(MC_FX, 0);
+            else if (view == 4u) man_open(MC_MIX, 0);
             else if (view == 2u) man_open(MC_SONG, seq_run ? 4u : 0u);                                  /* the page for what you are doing: playing, adding a channel, the knobs' second page ... */
             else if (view == 3u && sel < chan_n && IS_DRUM(chan[sel].kind)) man_open(MC_DRUM, 0);
             else if (view == 3u) man_open(MC_STEP, 0);

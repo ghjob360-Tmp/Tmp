@@ -1,0 +1,53 @@
+# Chipbox (synthwave edition): the host checks on every push to chipbox/, and the FM-1 package (.fwsc) when run by hand.
+# Actions > chipbox > Run workflow: the .fwsc comes out as an artifact (install it with the install page or tools/fm1_install.py).
+name: chipbox
+
+on:
+  push:
+    paths: ["chipbox/**", ".github/workflows/chipbox.yml"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version for the package name (empty: a dev build)"
+        required: false
+        default: ""
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: chipbox } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Engine checks (tests/ext_check.c)
+        run: |
+          mkdir -p build/host
+          cc -O2 -Wall -Wno-unused-function -DCHIPBOX_HOST -DCHIPBOX_TEST -Dmain=host_main -DAPP_VER='"ci"' -Ifirmware/src -Ifirmware/gen -o build/host/ext_check tests/ext_check.c -lm
+          build/host/ext_check
+      - name: Host build and the demo
+        run: |
+          cc -O2 -Wall -Wno-unused-function -DCHIPBOX_HOST -DAPP_VER='"ci"' -Ifirmware/src -Ifirmware/gen -o build/host/chipbox firmware/src/chipbox.c
+          for f in tests/stepx.txt tests/mix.txt tests/patch.txt tests/va_pages.txt; do HOST_FLASH= build/host/chipbox build/host/$(basename $f .txt) $f > /dev/null; done
+
+  fwsc:
+    if: github.event_name == 'workflow_dispatch'
+    needs: host
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: JieLi toolchain, AC79 SDK files, Pillow
+        run: |
+          sh chipbox/tools/get_toolchain.sh "$HOME/.jieli"
+          git clone --depth 1 --filter=blob:none --sparse --branch AC79NN_SDK_V1.2.1_2023-12-13 https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"
+          git -C "$HOME/fw-AC79_AIoT_SDK" sparse-checkout set --no-cone /cpu/wl82/tools/uboot.boot /cpu/wl82/tools/cfg_tool.bin /cpu/wl82/tools/cfg/eq_cfg_hw.bin
+          pip3 install --break-system-packages Pillow
+      - name: Build
+        working-directory: chipbox
+        env:
+          JIELI_TOOLCHAIN: /home/runner/.jieli/toolchain
+          AC79_SDK: /home/runner/fw-AC79_AIoT_SDK
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then ./build.sh --release "${{ inputs.version }}"; else ./build.sh; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chipbox-fwsc
+          path: chipbox/build/*.fwsc

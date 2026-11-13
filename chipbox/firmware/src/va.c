@@ -118,7 +118,8 @@ static int32_t harm(uint32_t i, const uint8_t *amp, uint32_t nh, uint32_t cyc)  
 {
     uint32_t h;
     int32_t v = 0;
-    for (h = 0; h < nh; h++) if (amp[h]) v += sn((uint32_t)(((uint64_t)i * (h + 1u) << 32) / cyc)) * amp[h] >> 8;
+    (void)cyc;                                  /* (the cycle is CYC = 128 samples: a 32-bit phase of i x h << 25) */
+    for (h = 0; h < nh; h++) if (amp[h]) v += sn((uint32_t)(i * (h + 1u)) << 25) * amp[h] >> 8;
     return v;
 }
 static void bank_make(void)                     /* (main loop: about a tenth of a second, once) */

@@ -80,6 +80,7 @@ static void ed_knob(uint32_t c, uint32_t st, uint32_t k, int32_t e)
     }
     proj_edited();
 }
+static uint32_t bits12(uint32_t m) { uint32_t n = 0; while (m) { n += m & 1u; m >>= 1; } return n; }
 static uint32_t chord_match(const uint8_t *notes, uint32_t n, uint32_t *root)     /* keys held together: the lowest is the root, the rest pick the nearest chord */
 {
     uint32_t i, s, best = 0, bs = 0, lo = 255u, want = 0;
@@ -90,7 +91,7 @@ static uint32_t chord_match(const uint8_t *notes, uint32_t n, uint32_t *root)   
         const uint32_t a = STEP_CHORD[s] - 1u;
         uint32_t m = 0, j, sc;
         for (j = 0; j < ARP_N[a]; j++) m |= 1u << ((uint32_t)ARP_IV[a][j] % 12u);
-        sc = (uint32_t)__builtin_popcount(m & want) * 4u - (uint32_t)__builtin_popcount(m ^ want);
+        sc = bits12(m & want) * 4u - bits12(m ^ want);
         if (m == want) return s;
         if (sc > bs) { bs = sc; best = s; }
     }

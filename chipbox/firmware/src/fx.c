@@ -223,7 +223,7 @@ static void fx_master(int32_t *out, uint32_t n)
             int32_t l = out[2u * i], r = out[2u * i + 1u], a = (l < 0 ? -l : l) > (r < 0 ? -r : r) ? (l < 0 ? -l : l) : (r < 0 ? -r : r);
             if (mset.comp) {
                 cmp_env += a > cmp_env ? (a - cmp_env) >> 4 : -((cmp_env - a) >> 12);
-                if (!(i & 15u)) cmp_g = cmp_env > T ? (int32_t)(((int64_t)(T + (cmp_env - T) / 4) << 8) / cmp_env) : 256;
+                if (!(i & 15u)) cmp_g = cmp_env > T ? ((T + (cmp_env - T) / 4) << 8) / cmp_env : 256;       /* (32-bit: no 64-bit division on the FM-1) */
                 l = (l * cmp_g >> 8) * mk >> 8; r = (r * cmp_g >> 8) * mk >> 8;
             }
             if (mset.sat) { l = sclip(l * sg >> 8); r = sclip(r * sg >> 8); }

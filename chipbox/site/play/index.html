@@ -77,6 +77,7 @@
 </div>
 <div class="bar">
   <button id="mute" type="button" aria-pressed="false">Mute</button>
+  <button id="rec" type="button" aria-pressed="false" title="Record what plays, at 44.1 kHz, to a WAV file">Record WAV</button>
   <span id="midi"></span>
   <button id="reset" type="button" title="Whoopsie daisy!">Factory reset</button>
 </div>
@@ -207,6 +208,7 @@
   function pull() {
     var p = mod._web_audio() >> 2, h = mod.HEAP32, out = new Float32Array(512), i;
     for (i = 0; i < 512; i++) { var v = h[p + i]; out[i] = (v > 32767 ? 32767 : v < -32767 ? -32767 : v) / 32768; }
+    if (recording) { var b = new Int16Array(512); for (i = 0; i < 512; i++) b[i] = Math.round(out[i] * 32767); recBlocks.push(b); }
     return out;
   }
   function startAudio() {
@@ -233,6 +235,25 @@
   $("go").addEventListener("click", function () { startAudio(); $("start").hidden = true; });
   $("mute").addEventListener("click", function () { muted = !muted; this.setAttribute("aria-pressed", muted); });
 
+  /* Record WAV: the firmware's own 44.1 kHz output (before the browser resamples it), stereo, 16 bit, saved when you stop */
+  var recording = false, recBlocks = [];
+  function wavOut() {
+    var n = 0, i, o = 44; recBlocks.forEach(function (b) { n += b.length; });
+    var buf = new ArrayBuffer(44 + n * 2), d = new DataView(buf);
+    function str(at, t) { for (var k = 0; k < t.length; k++) d.setUint8(at + k, t.charCodeAt(k)); }
+    str(0, "RIFF"); d.setUint32(4, 36 + n * 2, true); str(8, "WAVEfmt "); d.setUint32(16, 16, true); d.setUint16(20, 1, true); d.setUint16(22, 2, true);
+    d.setUint32(24, 44100, true); d.setUint32(28, 44100 * 4, true); d.setUint16(32, 4, true); d.setUint16(34, 16, true); str(36, "data"); d.setUint32(40, n * 2, true);
+    recBlocks.forEach(function (b) { for (i = 0; i < b.length; i++, o += 2) d.setInt16(o, b[i], true); });
+    var a = document.createElement("a"), url = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+    a.href = url; a.download = "chipbox-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".wav";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+  }
+  $("rec").addEventListener("click", function () {
+    if (!recording) { startAudio(); $("start").hidden = true; recBlocks = []; recording = true; this.textContent = "Stop and save"; }
+    else { recording = false; this.textContent = "Record WAV"; if (recBlocks.length) wavOut(); recBlocks = []; }
+    this.setAttribute("aria-pressed", recording);
+  });
+
   /* what you made stays in the browser */
   function save() {
     if (!mod) return;
@@ -240,7 +261,9 @@
       var f = new Uint8Array(mod.HEAPU8.buffer, mod._web_flash(), mod._web_flash_len()), s = new Uint8Array(mod.HEAPU8.buffer, mod._web_store(), mod._web_store_len()), t = "", i;
       for (i = 0; i < f.length; i += 4096) t += String.fromCharCode.apply(null, f.subarray(i, i + 4096));
       var t2 = ""; for (i = 0; i < s.length; i++) t2 += String.fromCharCode(s[i]);
-      localStorage.setItem(KEY, JSON.stringify({ f: btoa(t), s: btoa(t2) }));
+      var pp = mod._web_patch ? new Uint8Array(mod.HEAPU8.buffer, mod._web_patch(), mod._web_patch_len()) : null, t3 = "";
+      if (pp) for (i = 0; i < pp.length; i += 4096) t3 += String.fromCharCode.apply(null, pp.subarray(i, i + 4096));
+      localStorage.setItem(KEY, JSON.stringify({ f: btoa(t), s: btoa(t2), p: btoa(t3) }));
     } catch (e) {}
   }
   function restore() {
@@ -250,6 +273,7 @@
       if (f.length !== mod._web_flash_len() || s.length !== mod._web_store_len()) return;
       for (i = 0; i < f.length; i++) H[fp + i] = f.charCodeAt(i);
       for (i = 0; i < s.length; i++) H[sp + i] = s.charCodeAt(i);
+      if (d.p && mod._web_patch) { var p = atob(d.p), pq = mod._web_patch(); if (p.length === mod._web_patch_len()) for (i = 0; i < p.length; i++) H[pq + i] = p.charCodeAt(i); }     /* the user patches (newer pages) */
     } catch (e) {}
   }
   $("reset").addEventListener("click", function () { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); });

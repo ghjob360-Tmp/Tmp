@@ -53,13 +53,29 @@ static const mpage_t MP_SONG[] = {
 static const mpage_t MP_STEP[] = {
     {"Step entry", M_HOME, "Press HOME to go back to the rack when you are done."},
     {"Notes", M_KEYS | M_SELECT, "Press a key to write a note and move on. Turn SELECT to skip a step and leave a rest."},
+    {"Chords", M_KEYS | M_SMALL, "Hold a key and press more keys: the step plays that chord, on this channel's voices or on the channels below it."},
     {"Length", M_K2 | M_EDIT, "Turn KNOB 2 to make a note longer. Press EDIT to clear the note under the cursor."},
+    {"Layers", M_ENV | M_KNOBS | M_SMALL, "Tap ENV to turn the knobs' layer. The strip under the keys says what each knob does on the step."},
+    {"Layer 1", M_KNOBS | M_SMALL, "KNOB 1 tempo, KNOB 2 length, KNOB 3 velocity, KNOB 4 ratchet: up to four hits in the step."},
+    {"Layer 2", M_KNOBS | M_SMALL, "KNOB 1 nudges the step late, KNOB 2 sets its chance, KNOB 3 slides into it, KNOB 4 picks its chord."},
+    {"Layer 3", M_KNOBS | M_SMALL, "KNOB 1 locks a value for the step. KNOB 2 sets the channel's speed (1/16T for triplets), KNOB 3 its steps, KNOB 4 what a lock moves."},
+    {"Copy and paste", M_SEL | M_SMALL, "Press SEL to copy the channel's page. Hold SEL to paste it here, on this channel or another."},
     {"Channel and page", M_PRESETS | M_ALGO, "Turn PRESETS to pick another channel. Turn ALGORITHM to flip through your pages."},
 };
 static const mpage_t MP_DRUM[] = {
     {"Pick a drum", M_KEYS, "Press a black key to pick a drum and hear it. Turn PRESETS to pick another channel."},
     {"Place hits", M_KEYS, "Press a white key to place the drum on a step. Press it again to take it away."},
     {"Accents", M_ENV | M_EDIT, "Hold ENV and press a white key to add an accent. Press EDIT to clear this drum."},
+    {"Step extras", M_SELECT | M_ENV | M_KNOBS | M_SMALL, "Turn SELECT to put the cursor on a step. Tap ENV for the knobs' layer: ratchet, nudge, chance, speed, steps."},
+};
+static const mpage_t MP_MIX[] = {
+    {"Mix", M_HOME | M_ALGO, "Press HOME after the song to reach MIX. Turn ALGORITHM for its pages: GROOVE, CHORUS, DELAY, REVERB, MASTER."},
+    {"Groove", M_K1 | M_K2 | M_K3 | M_SMALL, "Turn KNOB 1 for swing. Turn KNOB 2 to lock the keys to a scale and KNOB 3 for its key."},
+    {"Sends", M_KNOBS | M_SMALL, "A channel's SENDS page sends it to the chorus, the delay and the reverb. The ECHO and VERB pads use the same delay and reverb."},
+    {"Delay and reverb", M_KNOBS | M_SMALL, "The delay keeps time: 1/16 to 1/2, ping-pong too. Turn the reverb's GATE up for the gated 80s snare."},
+    {"Master", M_KNOBS | M_SMALL, "Turn COMP to glue the mix and SAT to warm it. DUCK and SHAPE set how the sidechain pumps back."},
+    {"Undo and redo", M_LFO | M_ENV, "Press LFO to undo. Hold ENV and press LFO to redo what you undid."},
+    {"Patches", M_SEL | M_OCTU | M_SAVE | M_SMALL, "Hold SEL on the chip screen for the patches. OCT+ loads one; SAVE keeps the channel's sound in a user slot."},
 };
 static const mpage_t MP_FX[] = {
     {"Punch in", M_FX, "Press FX to turn the punch-in layer on. Press FX or HOME to leave it."},
@@ -94,9 +110,10 @@ static mchap_t MCH[] = {
     MC("Quick Start", RGB(120, 210, 120), MP_QUICK),
     MC("Rack", RGB(240, 150, 40), MP_RACK), MC("Chip", RGB(60, 190, 170), MP_CHIP), MC("Song", RGB(150, 110, 235), MP_SONG), MC("Step Entry", RGB(240, 150, 40), MP_STEP),
     MC("Drums", RGB(235, 100, 70), MP_DRUM), MC("FX Punch In", RGB(230, 90, 140), MP_FX), MC("Projects", RGB(120, 170, 230), MP_PROJ), MC("Menu", RGB(160, 160, 175), MP_MENU),
+    MC("Mix", RGB(255, 70, 170), MP_MIX),
 };
 #define MCHN (sizeof MCH / sizeof MCH[0])
-enum { MC_QUICK, MC_RACK, MC_CHIP, MC_SONG, MC_STEP, MC_DRUM, MC_FX, MC_PROJ, MC_MENU };
+enum { MC_QUICK, MC_RACK, MC_CHIP, MC_SONG, MC_STEP, MC_DRUM, MC_FX, MC_PROJ, MC_MENU, MC_MIX };
 
 /* the FM-1 as the Play online page draws it (1040 x 664, cut off under the buttons): knob and button centres */
 static const int16_t MKN[8][2] = {{139, 187}, {253, 185}, {139, 295}, {253, 295}, {665, 185}, {772, 185}, {880, 185}, {988, 185}};

@@ -34,9 +34,8 @@ static const epg_t EPG[EPGS] = {
     {"SAMPLE", "instrument, tuning", {EFX("SAMPLE", VO(SM_SAMPLE), 0, SAMPLES - 1, 0, SMP_NAME), EFX("SEMI", VO(SM_SEMI), 0, 24, EF_PM, 0), EFX("FINE", VO(SM_FINE), 0, 15, 0, 0), EFX("POLY", VO(VA_POLY), 1, 4, 0, 0)}},
     {"SAMPLE", "instrument, LED filter", {EFX("SAMPLE", VO(SM_SAMPLE), 0, SAMPLES - 1, 0, SMP_NAME), EFX("SEMI", VO(SM_SEMI), 0, 24, EF_PM, 0), EFX("LED", VO(SM_LED), 0, 1, 0, NM_OO), EFX("POLY", VO(VA_POLY), 1, 4, 0, 0)}},
 };
-static uint32_t ep_list(uint32_t c, uint8_t *l)  /* the channel's extra pages, in order */
+static uint32_t ep_list_k(uint32_t k, uint8_t *l)      /* a kind's extra pages, in order */
 {
-    const uint32_t k = chan[c].kind;
     uint32_t n = 0;
     if (IS_DRUM(k)) { l[n++] = EPG_FILT; l[n++] = EPG_SHAPE; l[n++] = EPG_SEND; l[n++] = EPG_STEP; return n; }
     if (k == KD_VA) { l[n++] = EPG_VAOSC; l[n++] = EPG_VAMIX; l[n++] = EPG_VAVOI; }
@@ -47,6 +46,7 @@ static uint32_t ep_list(uint32_t c, uint8_t *l)  /* the channel's extra pages, i
     l[n++] = EPG_SEND; l[n++] = EPG_STEP;
     return n;
 }
+static uint32_t ep_list(uint32_t c, uint8_t *l) { return ep_list_k(chan[c].kind, l); }
 static uint32_t ep_n(uint32_t c) { uint8_t l[16]; return ep_list(c, l); }
 static const epg_t *ep_pg(uint32_t c, uint32_t i) { uint8_t l[16]; const uint32_t n = ep_list(c, l); return &EPG[l[i < n ? i : 0]]; }
 static int32_t ep_getb(const uint8_t *b, const efd_t *f)
