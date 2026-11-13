@@ -1,0 +1,21 @@
+# Chipbox's golden check (FM1VST dinghy_golden.c): the same script on Chipbox's own host sim (tests/host.c) and on the
+# core module; the screens compared. OCT- hides the quick start, a VA channel added over MIDI (CC 106, kind 86), picked,
+# SEQ opens its steps, a chord written from three keys, the step layer turned (ENV is level-read: not used here),
+# a ratchet and the speed turned, PLAY.
+100 btn 0
+400 midi 0xB0 106 86
+600 enc 6 1
+650 enc 6 1
+700 enc 6 1
+750 enc 6 1
+900 btn 11
+1000 keys 0x80
+1100 keys 0x880
+1150 keys 0x4880
+1300 keys 0
+1400 enc 0 -1
+1500 enc 5 2
+1600 enc 2 3
+1800 btn 12
+2500 shot
+2600 end

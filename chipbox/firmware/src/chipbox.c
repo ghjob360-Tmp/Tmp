@@ -497,19 +497,31 @@ static void mk_off(uint32_t c, uint32_t note)
     mk_n[c] = (uint8_t)n;
     if (top) { if (n) chip_slide(c, mk_s[c][n - 1u]); else chip_off(c); }      /* it was the one sounding */
 }
+/* CHIPBOX_STEP (a host build for a module that returns from each tick: the FM1VST glue, the .rfm1): app_main boots on
+ * its first call and runs one pass of the loop on each call after that; its state is static. */
+#ifdef CHIPBOX_STEP
+#define STEP_STATIC static
+#else
+#define STEP_STATIC
+#endif
 static void app_main(void)
 {
-    struct { int8_t oct; uint8_t an[3], proj, demo, unlocked; } set = {0, {AN_HW, AN_HW, 0}, 0, 0, 0};
+    STEP_STATIC struct { int8_t oct; uint8_t an[3], proj, demo, unlocked; } set = {0, {AN_HW, AN_HW, 0}, 0, 0, 0};
 #define bt_pack() do { set.unlocked = (uint8_t)((clk_mode & 3u) | (brothers_mode & 3u) << 2 | bt_side << 4 | bt_patsync << 5 | bt_fxsync << 6 | bt_key << 7); dirty = 1; t_change = fm1_ms; } while (0)       /* the settings byte: MIDI clock, Bluetooth mode, sidechain, patterns */
-    uint32_t prev = 0, k, t_change = 0, dirty = 0, note_drawn = ~0u, chip_drawn = ~0u;
-    uint32_t last_note = 255u, view = 1, rack_force = 1, chip_page = 0, sel = 0;     /* view: 0 the chip, 1 the rack, 2 the song; sel: the channel (in the rack, one past the last is "add") */
-    uint32_t home_was = 0, home_t0 = 0, home_used = 0, home_now, home_tap, edit_was = 0, edit_t0 = 0, edit_now, edit_used = 0, edit_rel, edit_clr = 255u;
-    uint32_t fresh, start_pick = 0, btn_was = 0, crit_next = 0, crit_n = 0, sys_req = 0, play_t0 = 0, play_wait = 0, sel_was = 0, sel_t0 = 0, sel_used = 0, sel_now, dup_was = 0, dup_t0 = 0, dup_used = 0;
-    int32_t ed_hold_k = -1;                             /* STEP: the key held now and where its note went: KNOB 2 sets that note's length */
-    uint32_t ed_hold_step = 0;
-    uint8_t held[27] = {0}, held_ch[27] = {0}, ch_drawn = 99;
-    uint8_t rec_hold[27] = {0}, rec_pg[27] = {0}, rec_st[27] = {0}, rec_ch[27] = {0};     /* a recorded note still held: where it went, to set its length when the key comes up */
-    uint32_t rec_t0[27] = {0};
+    STEP_STATIC uint32_t prev = 0, k, t_change = 0, dirty = 0, note_drawn = ~0u, chip_drawn = ~0u;
+    STEP_STATIC uint32_t last_note = 255u, view = 1, rack_force = 1, chip_page = 0, sel = 0;     /* view: 0 the chip, 1 the rack, 2 the song; sel: the channel (in the rack, one past the last is "add") */
+    STEP_STATIC uint32_t home_was = 0, home_t0 = 0, home_used = 0, home_now, home_tap, edit_was = 0, edit_t0 = 0, edit_now, edit_used = 0, edit_rel, edit_clr = 255u;
+    STEP_STATIC uint32_t fresh, start_pick = 0, btn_was = 0, crit_next = 0, crit_n = 0, sys_req = 0, play_t0 = 0, play_wait = 0, sel_was = 0, sel_t0 = 0, sel_used = 0, sel_now, dup_was = 0, dup_t0 = 0, dup_used = 0;
+    STEP_STATIC int32_t ed_hold_k = -1;                             /* STEP: the key held now and where its note went: KNOB 2 sets that note's length */
+    STEP_STATIC uint32_t ed_hold_step = 0;
+    STEP_STATIC uint8_t held[27] = {0}, held_ch[27] = {0}, ch_drawn = 99;
+    STEP_STATIC uint8_t rec_hold[27] = {0}, rec_pg[27] = {0}, rec_st[27] = {0}, rec_ch[27] = {0};     /* a recorded note still held: where it went, to set its length when the key comes up */
+    STEP_STATIC uint32_t rec_t0[27] = {0};
+#ifdef CHIPBOX_STEP
+    static uint32_t step_booted;
+    if (step_booted) goto step_pass;
+    step_booted = 1;
+#endif
     fresh = settings_load(&set, sizeof set) != 0;      /* a new device (or a wipe): no settings yet */
     if ((set.demo & 0xF0u) != QS_OK) set.demo = QS_OK;
     clk_mode = (set.unlocked & 3u) <= 2u ? (uint8_t)(set.unlocked & 3u) : 0u;       /* the settings byte `unlocked` (never used before): bits 0-1 the MIDI clock, 2-3 the Bluetooth sync mode, 4 sidechain, 5 follow patterns */
@@ -555,6 +567,10 @@ static void app_main(void)
         man_open(MC_QUICK, 0); man_lock = 1;                                    /* like a new device */ \
     } while (0)
 
+#ifdef CHIPBOX_STEP
+    return;
+step_pass:
+#endif
     for (;;) {
         static uint32_t cc_ms;
         const theme_t *t;
@@ -1295,5 +1311,8 @@ static void app_main(void)
             settings_save(&set, sizeof set);
             dirty = 0;
         }
+#ifdef CHIPBOX_STEP
+        return;                                         /* (one pass a call) */
+#endif
     }
 }

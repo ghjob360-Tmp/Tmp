@@ -106,12 +106,14 @@ static int settings_load(void *p, uint32_t n)
     memcpy(p, host_store + 4, n);
     return 0;
 }
+static uint32_t host_store_n;                   /* the settings' length (the FM1VST glue writes them to its flash image) */
 static int settings_save(const void *p, uint32_t n)
 {
     host_store[0] = 1;
     memcpy(host_store + 4, p, n);
+    host_store_n = n;
     host_gen++;
-#ifndef CHIPBOX_WEB
+#if !defined(CHIPBOX_WEB) && !defined(CHIPBOX_CORE)
     printf("%6u ms  settings saved (%u B)\n", fm1_ms, n);
 #endif
     return 0;
@@ -127,7 +129,10 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
     mq_r++;
     return 1;
 }
-#ifdef CHIPBOX_WEB
+#ifdef CHIPBOX_CORE
+static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { fm1core_dg_midi_out(st, d1, d2); }      /* (the FM1VST glue's MIDI out: rfm1/) */
+static void midi_isr_send(uint32_t st, uint32_t d1, uint32_t d2) { fm1core_dg_midi_out(st, d1, d2); }
+#elif defined(CHIPBOX_WEB)
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { (void)st; (void)d1; (void)d2; }
 static void midi_isr_send(uint32_t st, uint32_t d1, uint32_t d2) { (void)st; (void)d1; (void)d2; }
 #else
@@ -140,7 +145,12 @@ static volatile uint8_t ota_back;                                   /* (the devi
 static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);
 
-#ifdef CHIPBOX_WEB
+#ifdef CHIPBOX_CORE
+/* a module for the FM1VST glue (rfm1/core_chipbox.c, the .rfm1): the glue sets fm1_ms and the input (fm1_in, host_edges,
+ * host_rel, enc_acc) before each pass, renders app_audio itself and reads fb and host_led after; the loop runs one pass a
+ * call (CHIPBOX_STEP), so the poll has nothing to do */
+static void platform_poll(void) {}
+#elif defined(CHIPBOX_WEB)
 /* in the browser (web/build.sh): the page feeds the keys, buttons and knobs, pulls the sound and draws the screen; platform_poll gives the browser its turn */
 static volatile uint32_t web_go;
 static void platform_poll(void)

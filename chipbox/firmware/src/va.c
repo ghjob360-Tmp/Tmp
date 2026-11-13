@@ -157,25 +157,26 @@ static void bank_make(void)                     /* (main loop: about a tenth of 
             const uint32_t t = i < att ? i : att + (i - att) % CYC;       /* (the loop's cycle follows on from the attack) */
             switch (s) {
             case 5: {   const int32_t d = (int32_t)(att - (t < att ? t : att)) * 256 / (int32_t)att;     /* an electric piano: a sine, its octave, a tine that dies away */
-                v = sn((uint32_t)((uint64_t)t * 0x2000000u)) + (sn((uint32_t)((uint64_t)t * 0x4000000u)) * (40 + d / 2) >> 8) + (sn((uint32_t)((uint64_t)t * 0x1C000000u)) * d * d >> 17); break; }
+                v = sn((uint32_t)((uint64_t)t * 33554432u)) + (sn((uint32_t)((uint64_t)t * 67108864u)) * (40 + d / 2) >> 8) + (sn((uint32_t)((uint64_t)t * 469762048u)) * d * d >> 17); break; }
             case 6: {   const int32_t d = (int32_t)(att - (t < att ? t : att)) * 256 / (int32_t)att;     /* a bass: bright when plucked, round after */
-                for (h = 0; h < 12u; h++) { v += sn((uint32_t)((uint64_t)t * (h + 1u) * 0x2000000u)) * (h ? (int32_t)(SAW[h] * (64 + d * 3 / 4)) >> 8 : 255) >> 8; }
+                for (h = 0; h < 12u; h++) { v += sn((uint32_t)((uint64_t)t * (h + 1u) * 33554432u)) * (h ? (int32_t)(SAW[h] * (64 + d * 3 / 4)) >> 8 : 255) >> 8; }
                 break; }
             case 7: {   const int32_t d = (int32_t)(att - (t < att ? t : att)) * 256 / (int32_t)att;     /* a bell: partials that are not harmonics, the high ones dying first */
-                static const uint32_t P[4] = {0x2000000u, 0x5850000u, 0xAC00000u, 0x11C00000u};
+                static const uint32_t P[4] = {          /* (phase steps a sample: the partials of a 128-sample cycle, x 2^25) */
+                    33554432u, 92602368u, 180355072u, 297795584u};
                 v = sn((uint32_t)((uint64_t)t * P[0])) * (64 + d * 3 / 4) >> 8;
                 for (h = 1; h < 4u; h++) { v += sn((uint32_t)((uint64_t)t * P[h])) * d * d / (int32_t)(256u * (h + 1u)) >> 8; }
                 break; }
             case 10: v = harm(t, a, 3, CYC) + (t < att ? (int32_t)((va_rng = va_rng * 1664525u + 1013904223u) >> 20) - 2048 : 0) * (int32_t)(att - t) / (int32_t)att; break;
             case 11: v = 0; break;              /* (Karplus-Strong below) */
             case 12: {  const int32_t d = (int32_t)(att - (t < att ? t : att)) * 256 / (int32_t)att;     /* an orchestra hit: a stacked chord and a burst, gone by the loop */
-                static const uint32_t P[5] = {0x2000000u, 0x2FE0000u, 0x4000000u, 0x5080000u, 0x8000000u};
+                static const uint32_t P[5] = {33554432u, 50200576u, 67108864u, 84410368u, 134217728u};
                 for (h = 0; h < 5u; h++) { uint32_t k; for (k = 1; k < 6u; k++) v += sn((uint32_t)((uint64_t)t * P[h] * k)) / (int32_t)(k * 5u); }
                 v = v * d * d >> 16;
                 if (t < 600u) v += ((int32_t)((va_rng = va_rng * 1664525u + 1013904223u) >> 18) - 8192) * (int32_t)(600u - t) / 600;
                 break; }
             case 14: {  const int32_t d = (int32_t)(att - (t < att ? t : att)) * 256 / (int32_t)att;     /* a marimba: a sine and its fourth harmonic, short */
-                v = (sn((uint32_t)((uint64_t)t * 0x2000000u)) * (24 + d) >> 8) + (sn((uint32_t)((uint64_t)t * 0x8000000u)) * d * d >> 17); break; }
+                v = (sn((uint32_t)((uint64_t)t * 33554432u)) * (24 + d) >> 8) + (sn((uint32_t)((uint64_t)t * 134217728u)) * d * d >> 17); break; }
             default: v = harm(t, a, 40, CYC); break;
             }
             w[i] = (int16_t)(v > 32767 ? 32767 : v < -32767 ? -32767 : v);
