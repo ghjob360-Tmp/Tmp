@@ -60,7 +60,7 @@ static void ico_chip(int32_t x, int32_t y, uint16_t body, uint16_t pin, uint16_t
 /* the chips' logos, made up: the chip's own number in the console's colours. Returns the width; rack_label is the little 3 x 5 font from rack.c */
 static int32_t ico_logo(uint32_t chip, int32_t x, int32_t y)
 {
-    static const char *const NUM[CHIPS] = {"2A03", "DMG", "SN76489", "HUC6280", "TIA", "VRC6", "AY8910", "YM2612", "VSU", "POKEY", "8253", "YM3812", "WSG", "N163", "5B", "MMC5", "RP2C33", "SCC", "YM2413", "VRC7", "YM2151", "YMF262", "ASWAN", "SAA1099", "6560", "7360", "MIKEY", "YM2608", "YM2610", "T6W28", "Y8950", "YM2414", "SN76477", "C30", "MSM5232", "ULA", "YM2203", "6581"};
+    static const char *const NUM[CHIPS] = {"2A03", "DMG", "SN76489", "HUC6280", "TIA", "VRC6", "AY8910", "YM2612", "VSU", "POKEY", "8253", "YM3812", "WSG", "N163", "5B", "MMC5", "RP2C33", "SCC", "YM2413", "VRC7", "YM2151", "YMF262", "ASWAN", "SAA1099", "6560", "7360", "MIKEY", "YM2608", "YM2610", "T6W28", "Y8950", "YM2414", "SN76477", "C30", "MSM5232", "ULA", "YM2203", "6581", "VA", "S-DSP", "PAULA"};
     const char *s = NUM[chip < CHIPS ? chip : 0];
     int32_t n = 0, w;
     while (s[n]) n++;

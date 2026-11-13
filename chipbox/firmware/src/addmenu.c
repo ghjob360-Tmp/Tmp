@@ -42,6 +42,9 @@ static const addinfo_t ADDI[CHIPS] = {
     {"Ferranti", "UK", "ULA 1 bit beeper", 1982, AT_MISC},         /* ZX Spectrum */
     {"Yamaha", "Japan", "YM2203 FM + SSG", 1984, AT_FM},           /* NEC PC-88 */
     {"MOS", "USA", "6581 / 8580 SID", 1982, AT_PSG},              /* Commodore 64 */
+    {"Chipbox", "Anywhere", "VA poly synth\nsaws + pulse", 1984, AT_MISC},     /* VA synth (not a chip: an 80s polysynth's way) */
+    {"Sony", "Japan", "S-DSP samples", 1990, AT_WAVE},             /* SNES */
+    {"Commodore", "USA", "Paula 8-bit\nsamples", 1985, AT_WAVE},   /* Amiga */
 };
 static const char *const ADD_LABEL[4] = {"Used in", "Composers", "Games", "Trivia"};
 static const char *const ADDX[CHIPS][4] = {                                  /* what a rested console tells you: where it was used, who wrote for it, what it played, a fact; each checked against two sources */
@@ -83,6 +86,9 @@ static const char *const ADDX[CHIPS][4] = {                                  /* 
     {"ZX Spectrum 16K, 48K, and 128K", "Tim Follin", "Chronos (48K version)", "The Spectrum's beeper is one bit, toggled through bit 4 of port 254."},
     {"NEC PC-8801, Fujitsu FM-77, and arcade boards", "Ayako Mori and Hisayoshi Ogura", "1943, Space Harrier, and Ghosts 'n Goblins", "It has a YM2149-type SSG built in, so 3 FM voices come with 3 square voices."},
     {"Commodore 64, Commodore 128, and MAX Machine", "Rob Hubbard, Martin Galway, and Jeroen Tel", "Commando, Monty on the Run, and Wizball", "The 6581's filter is non-linear and varies from chip to chip. The 8580's is linear."},
+    {"No console: Chipbox's own voice, made the way the 80s polysynths were", "Anyone making synthwave on Chipbox", "Your own tracks: leads, pads, basses and arps", "A supersaw is several saws a little out of tune with each other, played at once."},
+    {"Super Famicom and Super NES", "Koji Kondo, Yasunori Mitsuda and David Wise", "Super Mario World, Chrono Trigger and Donkey Kong Country 2", "The S-DSP's eight voices play 4-bit BRR samples from 64 KB of RAM it shares with the music program."},
+    {"Amiga 500, Amiga 1000 and Amiga 2000", "Chris Huelsbeck and Jochen Hippel", "Turrican II, Shadow of the Beast and Lotus Turbo Challenge", "Paula plays four 8-bit voices: two on the left and two on the right."},
 };
 static const char *const ADD_TYPE_NAME[4] = {"FM", "WAVETABLE", "PSG", "OTHER"};
 static const char *const ADD_TYPE_TAG[4] = {"FM", "WAVE", "PSG", "MISC"};
@@ -90,7 +96,7 @@ static const char *const ADD_COUNTRY[4] = {"Japan", "USA", "UK", "Netherlands"};
 static const char *const ADD_MODE[4] = {"TYPE", "YEAR", "MAKER", "COUNTRY"};
 static const char ADD_NAME[CHIPS][15] = {"NES", "Game Boy", "Master System", "PC Engine", "Atari 2600", "Konami VRC6", "AY-3-8910", "Mega Drive", "Virtual Boy", "Atari 8-bit", "PC Speaker", "AdLib",
                                          "Namco WSG", "Namco 163", "Sunsoft 5B", "NES MMC5", "Famicom Disk", "Konami SCC", "MSX Music", "Konami VRC7", "Arcade FM", "Sound Blaster", "WonderSwan",
-                                         "Sam Coupe", "VIC-20", "Plus/4", "Atari Lynx", "PC-98", "Neo Geo", "Neo Geo Pocket", "MSX-Audio", "Yamaha TX81Z", "SN76477", "Namco System 1", "Korg Poly-800", "ZX Spectrum", "NEC PC-88", "Commodore 64"};
+                                         "Sam Coupe", "VIC-20", "Plus/4", "Atari Lynx", "PC-98", "Neo Geo", "Neo Geo Pocket", "MSX-Audio", "Yamaha TX81Z", "SN76477", "Namco System 1", "Korg Poly-800", "ZX Spectrum", "NEC PC-88", "Commodore 64", "VA Synth", "SNES", "Amiga"};
 
 static uint8_t add_mode;                        /* 0 type, 1 year, 2 maker, 3 country: kept between visits */
 static uint8_t add_row[CHIPS + 24];             /* the list: a console's number, or 0x80 | the heading's number */

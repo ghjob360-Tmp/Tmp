@@ -210,7 +210,7 @@ static void fx_master(int32_t *out, uint32_t n)
             if (mset.rgate) {                    /* the gate: a hit opens it, it shuts after RGATE x 25 ms */
                 const int32_t a = in < 0 ? -in : in;
                 if (a > 1200) vb_gtime = (int32_t)mset.rgate * 1102;
-                if (vb_gtime) { vb_gtime--; vb_genv += (256 - vb_genv) >> 4; } else vb_genv -= vb_genv >> 6;
+                if (vb_gtime) { vb_gtime--; vb_genv = vb_genv < 256 ? vb_genv + ((256 - vb_genv) >> 4) + 1 : 256; } else vb_genv = vb_genv > 2 ? vb_genv - (vb_genv >> 6) - 1 : 0;
                 sum = sum * vb_genv >> 8;
             }
             out[2u * i] += sum; out[2u * i + 1u] += sum;

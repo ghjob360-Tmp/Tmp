@@ -5,7 +5,7 @@ typedef struct { const char *text; uint8_t head; } mline_t;      /* head: a head
 #define ML(s) {s, 0}
 #define MENU_ROWS 12                            /* 20 px a line */
 static const mline_t ADD_MENU[] = {                      /* the consoles, in the order of the chips in chips.c; a second list holds each one's channels */
-    MH("Add Channel"), ML("NES"), ML("Game Boy"), ML("Master System"), ML("PC Engine"), ML("Atari 2600"), ML("Konami VRC6"), ML("AY-3-8910"), ML("Mega Drive"), ML("Virtual Boy"), ML("Atari 8-bit"), ML("PC Speaker"), ML("AdLib"), ML("Namco WSG"), ML("Namco 163"), ML("Sunsoft 5B"), ML("NES MMC5"), ML("Famicom Disk"), ML("Konami SCC"), ML("MSX Music"), ML("Konami VRC7"), ML("Arcade FM"), ML("Sound Blaster"), ML("WonderSwan"), ML("Sam Coupe"), ML("VIC-20"), ML("Plus/4"), ML("Atari Lynx"), ML("PC-98"), ML("Neo Geo"), ML("Neo Geo Pocket"), ML("MSX-Audio"), ML("Yamaha TX81Z"), ML("SN76477"), ML("Namco System 1"), ML("Korg Poly-800"), ML("ZX Spectrum"), ML("NEC PC-88"), ML("Commodore 64"),
+    MH("Add Channel"), ML("NES"), ML("Game Boy"), ML("Master System"), ML("PC Engine"), ML("Atari 2600"), ML("Konami VRC6"), ML("AY-3-8910"), ML("Mega Drive"), ML("Virtual Boy"), ML("Atari 8-bit"), ML("PC Speaker"), ML("AdLib"), ML("Namco WSG"), ML("Namco 163"), ML("Sunsoft 5B"), ML("NES MMC5"), ML("Famicom Disk"), ML("Konami SCC"), ML("MSX Music"), ML("Konami VRC7"), ML("Arcade FM"), ML("Sound Blaster"), ML("WonderSwan"), ML("Sam Coupe"), ML("VIC-20"), ML("Plus/4"), ML("Atari Lynx"), ML("PC-98"), ML("Neo Geo"), ML("Neo Geo Pocket"), ML("MSX-Audio"), ML("Yamaha TX81Z"), ML("SN76477"), ML("Namco System 1"), ML("Korg Poly-800"), ML("ZX Spectrum"), ML("NEC PC-88"), ML("Commodore 64"), ML("VA Synth"), ML("SNES"), ML("Amiga"),
 };
 static const mline_t ADD_NES[] = {MH("NES"), ML("Pulse"), ML("Triangle"), ML("Noise"), ML("Drums")};
 static const mline_t ADD_GB[] = {MH("Game Boy"), ML("Pulse"), ML("Wave"), ML("Noise"), ML("Drums")};
@@ -45,6 +45,9 @@ static const mline_t ADD_MSM[] = {MH("Korg Poly-800"), ML("Organ"), ML("Drums")}
 static const mline_t ADD_ZX[] = {MH("ZX Spectrum"), ML("Beeper"), ML("Drums")};
 static const mline_t ADD_OPN[] = {MH("NEC PC-88"), ML("FM"), ML("SSG"), ML("Drums")};
 static const mline_t ADD_SID[] = {MH("Commodore 64"), ML("Voice"), ML("Drums")};
+static const mline_t ADD_VA[] = {MH("VA Synth"), ML("Synth")};
+static const mline_t ADD_SNES[] = {MH("SNES"), ML("Sampler")};
+static const mline_t ADD_AMI[] = {MH("Amiga"), ML("Sampler")};
 static const struct { const mline_t *l; uint8_t n, kind[4]; } ADD_SUB[CHIPS] = {
     {ADD_NES, 5, {KD_NES_PU, KD_NES_TRI, KD_NES_NOI, KD_DRUM0}}, {ADD_GB, 5, {KD_GB_PU, KD_GB_WAV, KD_GB_NOI, KD_DRUM0 + 1}}, {ADD_SMS, 3, {KD_SMS, KD_DRUM0 + 2, 0}},
     {ADD_PCE, 4, {KD_PCE, KD_PCE_NOI, KD_DRUM0 + 3, 0}}, {ADD_TIA, 3, {KD_TIA, KD_DRUM0 + 4, 0}}, {ADD_VRC6, 4, {KD_VRC6_PU, KD_VRC6_SAW, KD_DRUM0 + 5}},
@@ -57,6 +60,7 @@ static const struct { const mline_t *l; uint8_t n, kind[4]; } ADD_SUB[CHIPS] = {
     {ADD_PC98, 4, {KD_PC98_FM, KD_PC98_SSG, KD_DRUMF}}, {ADD_NEO, 4, {KD_NEO_FM, KD_NEO_SSG, KD_DRUMF + 1}}, {ADD_NGP, 3, {KD_NGP, KD_DRUMF + 2, 0}}, {ADD_OPL1, 3, {KD_OPL1, KD_DRUMF + 3, 0}},
     {ADD_OPZ, 3, {KD_OPZ, KD_DRUMF + 4, 0}}, {ADD_SN77, 3, {KD_SN77, KD_DRUMF + 5, 0}}, {ADD_C30, 3, {KD_C30, KD_DRUMF + 6, 0}},
     {ADD_MSM, 3, {KD_MSM, KD_DRUMG, 0}}, {ADD_ZX, 3, {KD_ZX, KD_DRUMG + 1, 0}}, {ADD_OPN, 4, {KD_OPN_FM, KD_OPN_SSG, KD_DRUMH}}, {ADD_SID, 3, {KD_SID, KD_DRUMI, 0}},
+    {ADD_VA, 2, {KD_VA, 0}}, {ADD_SNES, 2, {KD_SNES, 0}}, {ADD_AMI, 2, {KD_AMIGA, 0}},
 };
 static uint32_t add_console;
 

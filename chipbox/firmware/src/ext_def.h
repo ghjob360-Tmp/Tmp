@@ -5,6 +5,10 @@
  * chords, slides, parameter locks) and the channel's own chain (filter, drive, ensemble, pan, sends) that runs on a
  * channel rendered on its own. A setting at 0 is the old behaviour, so an old project sounds as it did. Integers only. */
 
+#ifndef POOL
+#define POOL __attribute__((section(".pool")))        /* big arrays live in the pool */
+#endif
+
 /* ---- the arp's chords: the old eight first (saved numbers), then the new ones; USER takes its notes from the channel */
 #define ARPS 22u
 enum { AC_USER = 22 };

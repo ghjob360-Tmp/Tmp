@@ -11,8 +11,8 @@
 
 #define OS 4u                                   /* oscillator steps per output frame */
 #define MAXCH 16u
-enum { CHIP_NES, CHIP_GB, CHIP_SMS, CHIP_PCE, CHIP_TIA, CHIP_VRC6, CHIP_AY, CHIP_MD, CHIP_VB, CHIP_POKEY, CHIP_SPK, CHIP_OPL, CHIP_WSG, CHIP_N163, CHIP_S5B, CHIP_MMC5, CHIP_FDS, CHIP_SCC, CHIP_OPLL, CHIP_VRC7, CHIP_OPM, CHIP_OPL3, CHIP_WS, CHIP_SAA, CHIP_VIC, CHIP_TED, CHIP_LYNX, CHIP_PC98, CHIP_NEO, CHIP_NGP, CHIP_OPL1, CHIP_OPZ, CHIP_SN77, CHIP_C30, CHIP_MSM, CHIP_ZX, CHIP_OPN, CHIP_SID, CHIPS };
-enum { KD_NES_PU, KD_NES_TRI, KD_GB_PU, KD_GB_WAV, KD_SMS, KD_PCE, KD_TIA, KD_VRC6_PU, KD_VRC6_SAW, KD_AY, KD_MD, KD_VB_WAV, KD_DRUM0, KD_POKEY = KD_DRUM0 + 9, KD_SPK, KD_OPL, KD_WSG, KD_N163, KD_S5B, KD_DRUMB, KD_MMC5 = KD_DRUMB + 6, KD_FDS, KD_SCC, KD_OPLL, KD_DRUMC, KD_VRC7 = KD_DRUMC + 4, KD_OPM, KD_OPL3, KD_WS, KD_DRUMD, KD_SAA = KD_DRUMD + 4, KD_VIC, KD_TED, KD_LYNX, KD_DRUME, KD_PC98_FM = KD_DRUME + 4, KD_PC98_SSG, KD_NEO_FM, KD_NEO_SSG, KD_NGP, KD_OPL1, KD_OPZ, KD_SN77, KD_C30, KD_DRUMF, KD_MSM = KD_DRUMF + 7, KD_ZX, KD_DRUMG, KD_OPN_FM = KD_DRUMG + 2, KD_OPN_SSG, KD_DRUMH, KD_SID, KD_DRUMI, KD_NES_NOI, KD_GB_NOI, KD_PCE_NOI, KD_VB_NOI, KINDS = KD_VB_NOI + 1 };       /* the drum kits, one a console, in the order of the chips */
+enum { CHIP_NES, CHIP_GB, CHIP_SMS, CHIP_PCE, CHIP_TIA, CHIP_VRC6, CHIP_AY, CHIP_MD, CHIP_VB, CHIP_POKEY, CHIP_SPK, CHIP_OPL, CHIP_WSG, CHIP_N163, CHIP_S5B, CHIP_MMC5, CHIP_FDS, CHIP_SCC, CHIP_OPLL, CHIP_VRC7, CHIP_OPM, CHIP_OPL3, CHIP_WS, CHIP_SAA, CHIP_VIC, CHIP_TED, CHIP_LYNX, CHIP_PC98, CHIP_NEO, CHIP_NGP, CHIP_OPL1, CHIP_OPZ, CHIP_SN77, CHIP_C30, CHIP_MSM, CHIP_ZX, CHIP_OPN, CHIP_SID, CHIP_VA, CHIP_SNES, CHIP_AMIGA, CHIPS };
+enum { KD_NES_PU, KD_NES_TRI, KD_GB_PU, KD_GB_WAV, KD_SMS, KD_PCE, KD_TIA, KD_VRC6_PU, KD_VRC6_SAW, KD_AY, KD_MD, KD_VB_WAV, KD_DRUM0, KD_POKEY = KD_DRUM0 + 9, KD_SPK, KD_OPL, KD_WSG, KD_N163, KD_S5B, KD_DRUMB, KD_MMC5 = KD_DRUMB + 6, KD_FDS, KD_SCC, KD_OPLL, KD_DRUMC, KD_VRC7 = KD_DRUMC + 4, KD_OPM, KD_OPL3, KD_WS, KD_DRUMD, KD_SAA = KD_DRUMD + 4, KD_VIC, KD_TED, KD_LYNX, KD_DRUME, KD_PC98_FM = KD_DRUME + 4, KD_PC98_SSG, KD_NEO_FM, KD_NEO_SSG, KD_NGP, KD_OPL1, KD_OPZ, KD_SN77, KD_C30, KD_DRUMF, KD_MSM = KD_DRUMF + 7, KD_ZX, KD_DRUMG, KD_OPN_FM = KD_DRUMG + 2, KD_OPN_SSG, KD_DRUMH, KD_SID, KD_DRUMI, KD_NES_NOI, KD_GB_NOI, KD_PCE_NOI, KD_VB_NOI, KD_VA, KD_SNES, KD_AMIGA, KINDS = KD_AMIGA + 1 };       /* the drum kits, one a console, in the order of the chips */
 #define IS_DRUM(k) (((k) >= KD_DRUM0 && (k) < KD_POKEY) || ((k) >= KD_DRUMB && (k) < KD_MMC5) || ((k) >= KD_DRUMC && (k) < KD_VRC7) || ((k) >= KD_DRUMD && (k) < KD_SAA) || ((k) >= KD_DRUME && (k) < KD_PC98_FM) || ((k) >= KD_DRUMF && (k) < KD_MSM) || ((k) >= KD_DRUMG && (k) < KD_OPN_FM) || ((k) >= KD_DRUMH && (k) < KD_SID) || (k) == KD_DRUMI)      /* the kits of the first nine consoles come first, the later ones after the later chips */
 #define IS_NZK(k) ((k) >= KD_NES_NOI && (k) <= KD_VB_NOI)       /* the melodic noise voices (kinds added last: saved ids) */
 #define DRUM_KIT(k) ((k) < KD_POKEY ? (k) - KD_DRUM0 : (k) < KD_MMC5 ? 9u + (k) - KD_DRUMB : (k) < KD_VRC7 ? 15u + (k) - KD_DRUMC : (k) < KD_SAA ? 19u + (k) - KD_DRUMD : (k) < KD_PC98_FM ? 23u + (k) - KD_DRUME : (k) < KD_MSM ? 27u + (k) - KD_DRUMF : (k) < KD_OPN_FM ? 34u + (k) - KD_DRUMG : (k) < KD_SID ? 36u + (k) - KD_DRUMH : 37u + (k) - KD_DRUMI)
@@ -33,7 +33,8 @@ static const uint8_t KIND_CHIP[KINDS] = {CHIP_NES, CHIP_NES, CHIP_GB, CHIP_GB, C
                                          CHIP_MSM, CHIP_ZX,
                                          CHIP_OPN, CHIP_OPN, CHIP_OPN,
                                          CHIP_SID, CHIP_SID,
-                                         CHIP_NES, CHIP_GB, CHIP_PCE, CHIP_VB};
+                                         CHIP_NES, CHIP_GB, CHIP_PCE, CHIP_VB,
+                                         CHIP_VA, CHIP_SNES, CHIP_AMIGA};
 
 /* ---- instruments: what a note sounds like, per channel */
 typedef struct {
@@ -109,8 +110,11 @@ static const inst_t INST_DEF[KINDS] = {
     IV(0, 0, 0, 0, 15, 3, 5, 0, 0, 1, 6),            /* Game Boy noise: duty = 0 long / 1 short register (7 bit), notes pick the nearest of the chip's noise rates */
     IV(0, 0, 0, 0, 15, 3, 5, 0, 0, 1, 10),            /* PC Engine noise: duty = the rate 1..31 (0 follows the note) */
     IV(0, 0, 0, 0, 15, 3, 5, 0, 0, 1, 5),            /* Virtual Boy noise: duty = the tap 0..7 */
+    IV(0, 0, 0, 4, 12, 4, 5, 0, 0, 1, 12),           /* VA synth: its settings are in the channel's extras (va.c) */
+    IV(0, 0, 0, 6, 12, 5, 5, 0, 0, 1, 13),           /* SNES sampler */
+    IV(0, 0, 0, 6, 12, 4, 5, 0, 0, 1, 13),           /* Amiga sampler: pan = left, centre, right */
 };
-static const char *const KIND_NAME[KINDS] = {"PU", "TRI", "PU", "WAV", "TN", "PCE", "TIA", "PU", "SAW", "AY", "FM", "VB", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "POK", "SPK", "OPL", "WSG", "N16", "5B", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "MM5", "FDS", "SCC", "YM", "DRM", "DRM", "DRM", "DRM", "VR7", "OPM", "OP3", "WS", "DRM", "DRM", "DRM", "DRM", "SAA", "VIC", "TED", "LYN", "DRM", "DRM", "DRM", "DRM", "FM", "SSG", "FM", "SSG", "NGP", "MA", "OPZ", "77", "C30", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "ORG", "ZX", "DRM", "DRM", "FM", "SSG", "DRM", "SID", "DRM", "NOI", "NOI", "NOI", "NOI"};
+static const char *const KIND_NAME[KINDS] = {"PU", "TRI", "PU", "WAV", "TN", "PCE", "TIA", "PU", "SAW", "AY", "FM", "VB", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "POK", "SPK", "OPL", "WSG", "N16", "5B", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "MM5", "FDS", "SCC", "YM", "DRM", "DRM", "DRM", "DRM", "VR7", "OPM", "OP3", "WS", "DRM", "DRM", "DRM", "DRM", "SAA", "VIC", "TED", "LYN", "DRM", "DRM", "DRM", "DRM", "FM", "SSG", "FM", "SSG", "NGP", "MA", "OPZ", "77", "C30", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "ORG", "ZX", "DRM", "DRM", "FM", "SSG", "DRM", "SID", "DRM", "NOI", "NOI", "NOI", "NOI", "VA", "SNS", "AMI"};
 
 #include "ext_def.h"
 
@@ -204,9 +208,9 @@ static uint32_t interp(const uint16_t *T, uint32_t pq)  /* a table indexed by no
 enum { AN_CLEAN, AN_HW, AN_ALT, AN_MODES };
 static volatile uint32_t analog_mode[CHIPS] = {AN_HW, AN_HW};
 typedef struct { int32_t x1, y1; } hpf_t;
-#define STEREO_IDX(ch) ((ch) == CHIP_OPM ? 0 : (ch) == CHIP_WS ? 1 : (ch) == CHIP_SAA ? 2 : (ch) == CHIP_LYNX ? 3 : (ch) == CHIP_PC98 ? 4 : (ch) == CHIP_NEO ? 5 : (ch) == CHIP_NGP ? 6 : (ch) == CHIP_C30 ? 7 : (ch) == CHIP_OPL3 ? 8 : -1)       /* the later chips with a right channel of their own */
+#define STEREO_IDX(ch) ((ch) == CHIP_OPM ? 0 : (ch) == CHIP_WS ? 1 : (ch) == CHIP_SAA ? 2 : (ch) == CHIP_LYNX ? 3 : (ch) == CHIP_PC98 ? 4 : (ch) == CHIP_NEO ? 5 : (ch) == CHIP_NGP ? 6 : (ch) == CHIP_C30 ? 7 : (ch) == CHIP_OPL3 ? 8 : (ch) == CHIP_VA ? 9 : (ch) == CHIP_SNES ? 10 : (ch) == CHIP_AMIGA ? 11 : -1)       /* the later chips with a right channel of their own */
 static hpf_t hp_mm[2];
-static hpf_t hp_nes[2], hp_gb[2], hp_x[2], hp_vb[2], hp_md[2], hp_nx[30], hp_nr[9];       /* ... and the VRC6 and the AY keep a DC blocker */               /* NES: two stages; Game Boy: left, right */
+static hpf_t hp_nes[2], hp_gb[2], hp_x[2], hp_vb[2], hp_md[2], hp_nx[CHIPS - CHIP_POKEY], hp_nr[12];       /* ... and the VRC6 and the AY keep a DC blocker */               /* NES: two stages; Game Boy: left, right */
 static int32_t lp_sp, lp_ws;
 typedef struct { int32_t y, x; } lpb_t;
 static lpb_t lp_nes, lp_mm, lp_fds;
@@ -313,6 +317,7 @@ static uint32_t att375(uint32_t a)                        /* an attenuation in t
 }
 static uint32_t tre_ph, vib_ph;                 /* the OPLL's two slow oscillators, 16 bit phases, stepped by the 60 Hz tick */
 static uint32_t vol_q;                          /* the voice's level before it is rounded to a step: Q4 (16 to a 3 dB step), 0..240; the FM kinds use it */
+static uint32_t vol_fx;                         /* the part of it that is not the note's envelope: tremolo, duck, solo, Q8 (the VA's chords use it) */
 static uint32_t fm_gain(uint32_t q)             /* its gain in 0.75 dB steps (the chips' TL step), Q16 of the old PCE_AMP[15] / 256; the last step fades to silence */
 {
     if (q >= 16u) return DB_ATT[(240u - q + 2u) >> 2] * 100u >> 8;
@@ -407,6 +412,7 @@ static uint32_t sn_run(uint32_t c)               /* one oscillator step of the n
     }
     return osc[c].rng & 1u;
 }
+#include "va.c"
 static void set_osc(uint32_t c, uint32_t pq, uint32_t vol)
 {
     const inst_t *in = &vc[c].in;
@@ -466,6 +472,7 @@ static void set_osc(uint32_t c, uint32_t pq, uint32_t vol)
         break; }
     case KD_ZX: osc[c].inc = interp32(NOTE_INC, pq); osc[c].duty = chan[c].in.duty & 7u; osc[c].vol = vol > 0u; break;       /* a pulse; the speaker is one bit, so no volume */
     case KD_SPK: osc[c].inc = interp32(SPK_INC, pq); osc[c].vol = vol > 0u; break;        /* the timer's divisor is a whole number; no volume: on or off */
+    case KD_VA: case KD_SNES: case KD_AMIGA: va_set(c, pq, va_poly(c) == 1u ? vol_q : vol_fx); osc[c].vol = (uint8_t)vol; break;
     case KD_SN77: {                                     /* a square, noise, or both; the slow oscillator swings the pitch (pan = how fast; the siren swings it twice as far) */
         static const uint8_t SLF[4] = {2, 3, 6, 12};
         const uint32_t m = chan[c].in.wave & 3u;
@@ -1373,7 +1380,7 @@ static void chip_clear(uint32_t chip)
     case CHIP_OPL: case CHIP_N163: case CHIP_S5B: case CHIP_POKEY: case CHIP_SCC: case CHIP_OPLL: case CHIP_VRC7: memset(&hp_nx[chip - CHIP_POKEY], 0, sizeof hp_nx[0]); break;
     case CHIP_VIC: case CHIP_TED: memset(&hp_nx[chip - CHIP_POKEY], 0, sizeof hp_nx[0]); break;
     case CHIP_OPZ: case CHIP_SN77: case CHIP_OPL1: case CHIP_MSM: case CHIP_ZX: case CHIP_OPN: case CHIP_SID: memset(&hp_nx[chip - CHIP_POKEY], 0, sizeof hp_nx[0]); break;
-    case CHIP_OPM: case CHIP_OPL3: case CHIP_WS: case CHIP_SAA: case CHIP_LYNX: case CHIP_PC98: case CHIP_NEO: case CHIP_NGP: case CHIP_C30: memset(&hp_nx[chip - CHIP_POKEY], 0, sizeof hp_nx[0]); memset(&hp_nr[STEREO_IDX(chip)], 0, sizeof hp_nr[0]); break;
+    case CHIP_OPM: case CHIP_OPL3: case CHIP_WS: case CHIP_SAA: case CHIP_LYNX: case CHIP_PC98: case CHIP_NEO: case CHIP_NGP: case CHIP_C30: case CHIP_VA: case CHIP_SNES: case CHIP_AMIGA: memset(&hp_nx[chip - CHIP_POKEY], 0, sizeof hp_nx[0]); memset(&hp_nr[STEREO_IDX(chip)], 0, sizeof hp_nr[0]); break;
     default: break;
     }
 }
@@ -1392,7 +1399,8 @@ static uint32_t tick_voice(uint32_t c)           /* returns 1 while the voice st
         osc[c].vol = in->vol & 15u; vc[c].env = on ? 3840u : 0u; vc[c].stage = on ? ST_SUS : ST_IDLE;
         return on;
     }
-    if (chan[c].kind == KD_SID) { vc[c].env = 3840u; vc[c].stage = vc[c].on || vc[c].trig || sid_busy(c) ? (vc[c].on ? ST_SUS : ST_REL) : ST_IDLE; }       /* the SID's own envelope runs in the renderer */
+    if (is_va(chan[c].kind) && va_poly(c) > 1u) { vc[c].stage = va_tick(c) ? (vc[c].on ? ST_SUS : ST_REL) : (vc[c].ahold ? ST_REL : ST_IDLE); }       /* chords: each voice its own envelope */
+    else if (chan[c].kind == KD_SID) { vc[c].env = 3840u; vc[c].stage = vc[c].on || vc[c].trig || sid_busy(c) ? (vc[c].on ? ST_SUS : ST_REL) : ST_IDLE; }       /* the SID's own envelope runs in the renderer */
     else if (IS_FMK(chan[c].kind)) {                    /* the FM kinds: every operator has its own envelope; the voice's level is the velocity and VOL */
         if (fm_env(c)) { vc[c].env = 3840u; vc[c].stage = vc[c].on ? ST_SUS : ST_REL; }
         else { vc[c].env = 0; vc[c].stage = ST_IDLE; }
@@ -1469,10 +1477,11 @@ static uint32_t voice_out(uint32_t c, uint32_t adv)      /* the pitch and the le
     vol_q = ((uint32_t)vc[c].env * ((uint32_t)vc[c].vel + 1u)) >> 11;
     if (vol_q > 240u) vol_q = 240u;
     vol_q = (vol_q * ((in->vol > 15u ? 15u : (uint32_t)in->vol) + 1u)) >> 4;
-    if (x->ltgt == LT_VOL && x->ldep) { const uint32_t g = 256u - ((uint32_t)x->ldep * 17u * (uint32_t)(256 - vc[c].lfo2) >> 9); vol = (vol * g + 128u) >> 8; vol_q = vol_q * g >> 8; }       /* tremolo */
-    if (duck_ch != 255u && c != duck_ch) { vol = vol * 5u >> 4; vol_q = vol_q * 5u >> 4; }       /* about -10 dB */
-    if (in->duck && duck_lvl) { const uint32_t dl = mset.dshape == 1u ? duck_lvl * duck_lvl >> 8 : mset.dshape == 2u ? (duck_lvl > 128u ? 256u : duck_lvl * 2u) : duck_lvl, g = 256u - ((in->duck > 15u ? 15u : (uint32_t)in->duck) * 17u * dl >> 8); vol = vol * g >> 8; vol_q = vol_q * g >> 8; }       /* the sidechain: a kick pulls it down, it comes back in about 180 ms */
-    if (fx_solo_ch != 255u && c != fx_solo_ch) { vol = 0; vol_q = 0; }
+    vol_fx = 256u;
+    if (x->ltgt == LT_VOL && x->ldep) { const uint32_t g = 256u - ((uint32_t)x->ldep * 17u * (uint32_t)(256 - vc[c].lfo2) >> 9); vol = (vol * g + 128u) >> 8; vol_q = vol_q * g >> 8; vol_fx = g; }       /* tremolo */
+    if (duck_ch != 255u && c != duck_ch) { vol = vol * 5u >> 4; vol_q = vol_q * 5u >> 4; vol_fx = vol_fx * 5u >> 4; }       /* about -10 dB */
+    if (in->duck && duck_lvl) { const uint32_t dl = mset.dshape == 1u ? duck_lvl * duck_lvl >> 8 : mset.dshape == 2u ? (duck_lvl > 128u ? 256u : duck_lvl * 2u) : duck_lvl, g = 256u - ((in->duck > 15u ? 15u : (uint32_t)in->duck) * 17u * dl >> 8); vol = vol * g >> 8; vol_q = vol_q * g >> 8; vol_fx = vol_fx * g >> 8; }       /* the sidechain: a kick pulls it down, it comes back in about 180 ms */
+    if (fx_solo_ch != 255u && c != fx_solo_ch) { vol = 0; vol_q = 0; vol_fx = 0; }
     set_osc(c, (uint32_t)pq, vol);
     if (chan[c].kind == KD_SID) vc[c].env = (uint16_t)(sid[c].env * 15u);       /* what the meter shows */
     return vc[c].stage != ST_IDLE || vc[c].ahold;
@@ -1513,10 +1522,16 @@ static void voice_gate_off(uint32_t c)          /* the arp's gate shuts: the not
     vc[c].stage = vc[c].stage == ST_IDLE ? ST_IDLE : ST_REL;
     if (is_va(chan[c].kind)) va_off(c, 255u);
 }
+#ifdef CHIPBOX_TEST
+static uint32_t t_on[MAXCH], t_at[MAXCH][64], t_frame;      /* (tests/ext_check.c: the notes that began, and on which frame) */
+#endif
 static void ev_do(uint32_t op, uint32_t c, uint32_t a, uint32_t b)
 {
     uint32_t chip;
     if (c >= chan_n) return;
+#ifdef CHIPBOX_TEST
+    if (op == EV_ON || op == EV_SLIDE || op == EV_ADD) { if (t_on[c] < 64u) t_at[c][t_on[c]] = t_frame; t_on[c]++; }
+#endif
     chip = KIND_CHIP[chan[c].kind];
     if (op == EV_SLIDE && (!vc[c].on || IS_DRUM(chan[c].kind))) { op = EV_ON; vc[c].slide = 1; }      /* a slide on a note that let go: a new note that glides there */
     if (op == EV_ADD) {                          /* another note of a chord, on a channel that plays chords itself */
@@ -1566,7 +1581,6 @@ static void arp_pulse(void)                     /* 24 a beat: the arps that run 
         }
     }
 }
-#include "va.c"
 #include "seq.c"
 #include "fx.c"
 #include "proc.c"
@@ -1580,6 +1594,7 @@ static int chan_add(uint32_t kind)               /* the new channel's number, or
     c = chan_n;
     chan[c].kind = (uint8_t)kind; chan[c].in = INST_DEF[kind]; fm_default(kind, &chan[c].fm); chan[c].wcus = 0;
     memset(&chan[c].x, 0, sizeof chan[c].x); ext_default(kind, &chan[c].x); chan[c].in.arp_rate = X_RATE_DEF;       /* a new channel's arp runs in time */
+    if (kind == KD_SNES || kind == KD_AMIGA) { chan_lock = 0; bank_make(); chan_lock = 1; }      /* the samplers' instruments, made the first time */
     memset(&vc[c], 0, sizeof vc[c]); vc[c].stage = ST_IDLE; memset(&fmo[c], 0, sizeof fmo[c]);
     memset(&osc[c], 0, sizeof osc[c]); osc[c].pan = 1; wkey[c] = 0; memset(dv[c], 0, sizeof dv[c]); memset(&sid[c], 0, sizeof sid[c]);
     chan_n++;
@@ -1596,6 +1611,7 @@ static void chan_set_kind(uint32_t c, uint32_t kind)   /* the channel becomes an
     chan[c].kind = (uint8_t)kind; chan[c].in = INST_DEF[kind]; fm_default(kind, &chan[c].fm); chan[c].wcus = 0;
     {   const ext_t keep = chan[c].x;                   /* the sound's extras start fresh; how the channel's steps run stays */
         memset(&chan[c].x, 0, sizeof chan[c].x); ext_default(kind, &chan[c].x); chan[c].in.arp_rate = X_RATE_DEF;
+        if (kind == KD_SNES || kind == KD_AMIGA) bank_make();
         chan[c].x.speed = keep.speed; chan[c].x.len = keep.len; chan[c].x.lkt = keep.lkt; chan[c].x.chv = keep.chv; }
     proc_reset();
     memset(&vc[c], 0, sizeof vc[c]); vc[c].stage = ST_IDLE; memset(&fmo[c], 0, sizeof fmo[c]);
@@ -1664,9 +1680,13 @@ static void render_chip(uint32_t chip, int32_t *buf, uint32_t run, uint8_t *act,
     case CHIP_C30: r_c30(buf, run, act, na); break;
     case CHIP_MSM: r_msm(buf, run, act, na); break;
     case CHIP_ZX: r_zx(buf, run, act, na); break;
+    case CHIP_VA: case CHIP_SNES: case CHIP_AMIGA: r_va(buf, run, act, na); break;
     default: r_sms(buf, run, act, na); break;
     }
 }
+#ifdef CHIPBOX_TEST
+static uint32_t t_base;                         /* the frames rendered before this block */
+#endif
 static uint32_t chip_stereo(uint32_t chip) { return STEREO_IDX(chip) >= 0 || chip == CHIP_GB || chip == CHIP_PCE || chip == CHIP_MD || chip == CHIP_VB; }
 static void chip_render(int32_t *out, uint32_t n)
 {
@@ -1687,7 +1707,12 @@ static void chip_render(int32_t *out, uint32_t n)
             seq_left = 0x40000000u;                     /* so the block is not cut at our own tick */
         } else {
             if (seq_left > 0x20000000u) seq_left = 0;   /* the outside clock went: our own is back */
-            while (seq_run && !seq_hold && !seq_left) { seq_off = i; seq_tick(); seq_left = seq_period(); }
+            while (seq_run && !seq_hold && !seq_left) {
+                seq_off = i;
+#ifdef CHIPBOX_TEST
+                t_frame = t_base + i;
+#endif
+                seq_tick(); seq_left = seq_period(); }
         }
         if (!(seq_run && !seq_hold)) {                  /* the sequencer stands still: the arps keep time by a clock of their own */
             static uint32_t aclk_left, aclk_frac;

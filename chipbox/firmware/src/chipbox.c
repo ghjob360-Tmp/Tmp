@@ -157,6 +157,12 @@ static const theme_t THEME[CHIPS] = {
      RGB(26, 34, 46), RGB(16, 22, 32), RGB(226, 232, 240), RGB(96, 176, 255), RGB(96, 112, 134), RGB(226, 232, 240), RGB(96, 176, 255)},
     {"SID", {"SD1", "SD2", "SD3"},                                                /* the C64's blue and its light blue */
      RGB(53, 40, 121), RGB(40, 30, 96), RGB(214, 208, 255), RGB(120, 208, 222), RGB(112, 98, 176), RGB(214, 208, 255), RGB(120, 208, 222)},
+    {"VA SYNTH", {"VA1", "VA2", "VA3"},                                           /* a synthwave night: deep violet, hot pink, a cyan grid */
+     RGB(26, 8, 40), RGB(14, 4, 24), RGB(250, 232, 255), RGB(255, 60, 170), RGB(110, 70, 140), RGB(250, 232, 255), RGB(60, 220, 255)},
+    {"SNES", {"SN1", "SN2", "SN3"},                                               /* the console's greys and its purple buttons */
+     RGB(40, 38, 52), RGB(26, 25, 36), RGB(230, 230, 240), RGB(140, 110, 230), RGB(110, 110, 130), RGB(230, 230, 240), RGB(140, 110, 230)},
+    {"AMIGA", {"AM1", "AM2", "AM3"},                                              /* Workbench: blue, white, orange */
+     RGB(0, 40, 100), RGB(0, 24, 70), RGB(255, 255, 255), RGB(255, 136, 0), RGB(90, 110, 160), RGB(255, 255, 255), RGB(255, 136, 0)},
 };
 
 static void text_on(uint32_t x, uint32_t y, uint32_t w, const felucca_font_t *f, const char *s, uint16_t c, uint16_t bg, int align)
