@@ -117,6 +117,6 @@
 ```sh
 cd chipbox
 cc -O2 -DCHIPBOX_HOST -DCHIPBOX_TEST -Dmain=host_main -Ifirmware/src -Ifirmware/gen -o build/host/ext_check tests/ext_check.c -lm
-build/host/ext_check          # 41 項檢查：音高、arp 時間、三連音、ratchet、機率、nudge、swing、和弦、slide、濾波、鎖定、send、gated reverb、存檔、預設音色
+build/host/ext_check          # 40 項檢查：音高、arp 時間、三連音、ratchet、機率、nudge、swing、和弦、slide、濾波、鎖定、send、gated reverb、存檔、預設音色
 tests/shots.sh tests/stepx.txt build/shots/stepx.png   # 螢幕截圖（mix.txt、patch.txt、va_pages.txt 也可以）
 ```
