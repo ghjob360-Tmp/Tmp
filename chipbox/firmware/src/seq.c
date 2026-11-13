@@ -36,11 +36,27 @@ static uint8_t bt_side, bt_patsync, bt_fxsync, bt_key, bt_scale, bt_last = 0xFFu
 static volatile uint32_t ext_in;
 static uint32_t ext_seen, ext_ms, ext_n, ext_t0;
 static struct { uint8_t on, gate; } tr[MAXCH];
+/* each channel walks its own steps: its speed (ticks a step) and length (ext_t); t counts its ticks from the start of its loop.
+ * A channel at 1/16 and 16 steps is always where the page is, as before. A step's hits (ratchet, nudge) are a mask of the ticks they land on. */
+static struct { uint16_t t; uint8_t loops, pos, sfl, slk, hit, nhit; uint32_t fmask; step_t st; } cs[MAXCH];
+static uint8_t rpt_pos[MAXCH];
+static uint32_t ch_spd(uint32_t t) { return STEP_SPD[chan[t].x.speed & 7u]; }
+static uint32_t ch_len(uint32_t t) { const uint32_t l = chan[t].x.len; return l && l <= SEQ_LEN ? l : SEQ_LEN; }
+static uint32_t ch_pos(uint32_t t) { const uint32_t sp = ch_spd(t), l = ch_len(t); return (cs[t].t / sp) % l; }      /* the step the channel is on (the screens' playhead) */
+static uint32_t ch_plain(uint32_t t) { return ch_spd(t) == SEQ_PPS && ch_len(t) == SEQ_LEN; }
+/* a step's own extras in its spare byte: ratchet - 1 (bits 0-1), chance (2-4), nudge in ticks (5-7) */
+#define ST_RAT(s) (((s)->spare & 3u) + 1u)
+#define ST_PROB(s) ((s)->spare >> 2 & 7u)
+#define ST_NUDGE(s) ((s)->spare >> 5 & 7u)
+static const uint8_t PROB_PC[8] = {100, 87, 75, 62, 50, 25, 0, 0};       /* 6: the first of every two loops, 7: the second */
+static const char *const PROB_NAME[8] = {"100%", "87%", "75%", "62%", "50%", "25%", "1:2", "2:2"};
 
 static uint32_t seq_period(void)                /* samples in one tick at the tempo, the remainder carried so the tempo is exact */
 {
     uint32_t bpm = seq_bpm < 40u ? 40u : seq_bpm > 240u ? 240u : seq_bpm;
-    uint32_t q = ((FS * 5u / 2u) << 8) / bpm + seq_frac;
+    uint32_t q = ((FS * 5u / 2u) << 8) / bpm;
+    if (mset.swing && !(clk_mode == 2u || brothers_mode == 2u)) q = q * (100u + ((seq_sub ? seq_step : seq_step + 1u) & 1u ? -2u * mset.swing : 2u * mset.swing)) / 100u;       /* swing: the even sixteenths longer, the odd ones shorter */
+    q += seq_frac;
     seq_frac = q & 255u;
     q >>= 8;
     return seq_rate == 1 || seq_rate == -1 ? q * 2u : seq_rate == 3 || seq_rate == -3 ? (q > 1u ? q / 2u : 1u) : q;     /* half speed, normal, double */
@@ -58,30 +74,74 @@ static void seq_drums_fire(uint32_t t, const step_t *s)     /* a drum channel's 
     if (h & 1u) duck_lvl = 256u;                /* a kick: the sidechain */
     for (l = 0; l < 11u; l++) if (h >> l & 1u) ev_do(EV_ON, t, DR_LANE_TYPE[l], a >> l & 1u ? 127u : 88u);
 }
+static uint32_t seq_next_slides(uint32_t t)    /* the channel's next step slides in: its note now holds on until then (the 303's way) */
+{
+    const uint32_t sp = ch_spd(t), l = ch_len(t), np = (cs[t].t / sp + 1u) % l;
+    return !IS_DRUM(chan[t].kind) && pat[seq_pat][t][np].note && (sx_fl(seq_pat, t, np) & SXF_SLIDE);
+}
+static void seq_step_begin(uint32_t t, uint32_t pos, uint32_t sp)       /* a channel reaches a step: does it play (its chance), and on which ticks (ratchet, nudge) */
+{
+    const step_t *x = &pat[seq_pat][t][pos];
+    uint32_t r, nd, i, pr, go;
+    cs[t].fmask = 0; cs[t].pos = (uint8_t)pos;
+    if (IS_DRUM(chan[t].kind) ? !dstep_hits(x) : !x->note) return;
+    pr = ST_PROB(x);
+    go = pr == 6u ? !(cs[t].loops & 1u) : pr == 7u ? (cs[t].loops & 1u) : pr == 0u || rnd() % 100u < PROB_PC[pr];
+    if (!go) return;
+    r = ST_RAT(x); nd = ST_NUDGE(x);
+    if (nd >= sp) nd = sp - 1u;
+    if (r > sp) r = sp;
+    for (i = 0; i < r; i++) { uint32_t at = nd + i * sp / r; if (at >= sp) at = sp - 1u; cs[t].fmask |= 1u << at; }
+    cs[t].st = *x; cs[t].hit = 0; cs[t].nhit = (uint8_t)r;
+    {   const sx_t *e = sx_get(seq_pat, t, pos);
+        cs[t].sfl = e ? e->fl : 0u; cs[t].slk = e ? e->lock : 0u; }
+}
+static void seq_fire(uint32_t t, uint32_t sp)   /* one hit of the channel's step: the note (a slide, a chord, a lock with it) or the drums */
+{
+    const step_t *x = &cs[t].st;
+    uint32_t note, g, ch, j;
+    if (IS_DRUM(chan[t].kind)) { seq_drums_fire(t, x); cs[t].hit++; return; }
+    note = bt_scale ? brothers_snap(x->note, bt_scale) : x->note;
+    g = x->gate;
+    if (cs[t].nhit > 1u) { const uint32_t gm = sp / cs[t].nhit * 3u / 4u; g = g < gm ? g : gm ? gm : 1u; }
+    if (cs[t].sfl & SXF_LOCK) { lk_pt[t] = chan[t].x.lkt; lk_pv[t] = cs[t].slk; }
+    tr[t].on = 1; tr[t].gate = (uint8_t)(g ? g : 1u);
+    if (seq_next_slides(t) && cs[t].hit + 1u >= cs[t].nhit && x->gate + 1u >= sp) tr[t].gate = 0;       /* held into the slide */
+    ev_do(cs[t].hit == 0u && (cs[t].sfl & SXF_SLIDE) ? EV_SLIDE : EV_ON, t, note, x->vel & 127u);
+    ch = cs[t].sfl & SXF_CHORD;
+    if (ch) {                                   /* a chord: on this channel if it plays chords, else on the channels below it */
+        const uint32_t sh = STEP_CHORD[ch], n = ARP_N[sh - 1u];
+        for (j = 1; j < n; j++) {
+            const uint32_t cn = note + (uint32_t)ARP_IV[sh - 1u][j];
+            if (cn > 127u) break;
+            if (is_va(chan[t].kind) && chan[t].x.va[11] > 1u) ev_do(EV_ADD, t, cn, x->vel & 127u);
+            else if (j <= chan[t].x.chv && t + j < chan_n && !IS_DRUM(chan[t + j].kind)) { tr[t + j].on = 1; tr[t + j].gate = tr[t].gate; ev_do(EV_ON, t + j, cn, x->vel & 127u); }
+        }
+    }
+    cs[t].hit++;
+}
 static void seq_clock(void)                     /* one tick, in the audio ISR */
 {
     uint32_t t;
     seq_ticks++;
     for (t = 0; t < chan_n; t++)                /* what is already sounding: its length */
-        if (tr[t].on && tr[t].gate && !--tr[t].gate) { ev_do(EV_OFF, t, 0, 0); tr[t].on = 0; }
+        if (tr[t].on && tr[t].gate && !--tr[t].gate) { if (seq_next_slides(t)) tr[t].gate = 0; else { ev_do(EV_OFF, t, 0, 0); tr[t].on = 0; } }
+    arp_pulse();                                /* (before the new notes: a note's first arp note is its own) */
     if (fx_rpt) {                               /* beat repeat: the step that was held sounds again and again */
         if (!rpt_cnt) for (t = 0; t < chan_n; t++) {
-            const step_t *s = &pat[rpt_page][t][rpt_step];
-            if (IS_DRUM(chan[t].kind)) { if (dstep_hits(s)) seq_drums_fire(t, s); continue; }
-            if (!s->note) continue;
-            tr[t].on = 1; tr[t].gate = s->gate < fx_rpt ? s->gate : (uint8_t)(fx_rpt > 1u ? fx_rpt - 1u : 1u);
-            ev_do(EV_ON, t, bt_scale ? brothers_snap(s->note, bt_scale) : s->note, s->vel);
+            const step_t *x = &pat[rpt_page][t][ch_plain(t) ? rpt_step : rpt_pos[t]];
+            if (IS_DRUM(chan[t].kind)) { if (dstep_hits(x)) seq_drums_fire(t, x); continue; }
+            if (!x->note) continue;
+            tr[t].on = 1; tr[t].gate = x->gate < fx_rpt ? x->gate : (uint8_t)(fx_rpt > 1u ? fx_rpt - 1u : 1u);
+            ev_do(EV_ON, t, bt_scale ? brothers_snap(x->note, bt_scale) : x->note, x->vel);
         }
         if (++rpt_cnt >= fx_rpt) rpt_cnt = 0;
     }
-    if (!seq_sub && !fx_rpt) {                  /* a new step */
-        for (t = 0; t < chan_n; t++) {
-            const step_t *s = &pat[seq_pat][t][seq_step];
-            if (IS_DRUM(chan[t].kind)) { if (dstep_hits(s)) seq_drums_fire(t, s); continue; }
-            if (!s->note) continue;
-            tr[t].on = 1; tr[t].gate = s->gate;
-            ev_do(EV_ON, t, bt_scale ? brothers_snap(s->note, bt_scale) : s->note, s->vel);
-        }
+    for (t = 0; t < chan_n; t++) {               /* each channel: a new step of its own, then the hits that land on this tick */
+        const uint32_t sp = ch_spd(t), l = ch_len(t), sub = cs[t].t % sp;
+        if (!fx_rpt && !sub) seq_step_begin(t, (cs[t].t / sp) % l, sp);
+        if (!fx_rpt && (cs[t].fmask >> sub & 1u)) seq_fire(t, sp);
+        if (++cs[t].t >= sp * l) { cs[t].t = 0; cs[t].loops++; }
     }
     if (++seq_sub >= SEQ_PPS) {
         seq_sub = 0;
@@ -91,11 +151,12 @@ static void seq_clock(void)                     /* one tick, in the audio ISR */
                 seq_run = 0;
                 for (t = 0; t < chan_n; t++) { ev_do(EV_OFF, t, 0, 0); tr[t].on = 0; }
             }
-            else if (seq_loop) { if (seq_next < page_n) { seq_pat = seq_next; seq_next = 255; } }
-            else {                                  /* the next slot of the song, and round again at the end */
+            else if (seq_loop) { if (seq_next < page_n) { seq_pat = seq_next; seq_next = 255; } for (t = 0; t < chan_n; t++) if (ch_plain(t)) cs[t].t = 0; }
+            else {                                  /* the next slot of the song, and round again at the end: every channel starts the page together */
                 if (++seq_slot >= song_len) seq_slot = 0;
                 seq_pat = song[seq_slot] < page_n ? song[seq_slot] : 0;
                 if (seq_follow) seq_view = seq_pat;
+                for (t = 0; t < chan_n; t++) cs[t].t = 0;
             }
         }
     }
@@ -107,6 +168,18 @@ static void seq_back(void)                      /* one tick backwards: crossing 
     seq_ticks++;
     for (t = 0; t < chan_n; t++)
         if (tr[t].on && tr[t].gate && !--tr[t].gate) { ev_do(EV_OFF, t, 0, 0); tr[t].on = 0; }
+    arp_pulse();
+    if (!fx_rpt)
+        for (t = 0; t < chan_n; t++) {          /* each channel steps back on its own; it plays a step as it enters it from the end */
+            const uint32_t sp = ch_spd(t), l = ch_len(t);
+            cs[t].t = (uint16_t)(cs[t].t ? cs[t].t - 1u : sp * l - 1u);
+            if (cs[t].t % sp == sp - 1u) {
+                const uint32_t pos = (cs[t].t / sp) % l;
+                const step_t *x = &pat[seq_pat][t][pos];
+                if (IS_DRUM(chan[t].kind)) { if (dstep_hits(x)) seq_drums_fire(t, x); }
+                else if (x->note) { tr[t].on = 1; tr[t].gate = x->gate; ev_do(EV_ON, t, x->note, x->vel & 127u); }
+            }
+        }
     if (seq_sub) { seq_sub--; return; }
     seq_sub = SEQ_PPS - 1u;
     if (seq_step) seq_step--;
@@ -118,13 +191,6 @@ static void seq_back(void)                      /* one tick backwards: crossing 
             if (seq_follow) seq_view = seq_pat;
         }
     }
-    if (fx_rpt) return;
-    for (t = 0; t < chan_n; t++) {
-        const step_t *s = &pat[seq_pat][t][seq_step];
-        if (!s->note) continue;
-        tr[t].on = 1; tr[t].gate = s->gate;
-        ev_do(EV_ON, t, s->note, s->vel);
-    }
 }
 static uint32_t seq_off;                         /* the sample of this render the tick is on (chips.c sets it): the brothers' leader timestamps by it */
 static void seq_tick(void) { if (clk_mode == 1u && seq_rate > 0) midi_isr_send(0xF8u, 0, 0); if (brothers_mode == 1u && seq_rate > 0) brothers_lead_tick(seq_off, 60000000u / (seq_bpm < 40u ? 40u : seq_bpm > 240u ? 240u : seq_bpm) * (seq_rate == 1 ? 2u : 1u) / (seq_rate == 3 ? 2u : 1u)); if (seq_rate < 0) seq_back(); else seq_clock(); }
@@ -132,8 +198,10 @@ static void seq_tick(void) { if (clk_mode == 1u && seq_rate > 0) midi_isr_send(0
 /* ---- the main loop's side */
 static void seq_play(uint32_t slot, uint32_t loop)      /* the song from a slot; loop 1: the page on show round and round; loop 2: that page once */
 {
+    uint32_t t;
     memset(tr, 0, sizeof tr);
     if (!(seq_seeked && loop == 1u)) seq_step = seq_sub = 0;       /* a page you seeked in goes on from where you left the playhead */
+    for (t = 0; t < MAXCH; t++) { cs[t].t = (uint16_t)(t < chan_n && ch_plain(t) ? seq_step * SEQ_PPS + seq_sub : 0u); cs[t].loops = 0; cs[t].fmask = 0; vc[t].lph2 = 0; }
     seq_seeked = 0; seq_left = seq_frac = 0; seq_rate = 2; seq_hold = 0;
     seq_next = 255; seq_loop = (uint8_t)loop;
     if (loop) { seq_pat = seq_view; seq_follow = 0; }
@@ -162,7 +230,9 @@ static void seq_shuttle(int32_t d)              /* SELECT turned: the tape dial 
     seq_seeked = 1;
     if (r == seq_rate) return;
     if (!seq_run) {                             /* from a stop: the page on show, from where the playhead is */
+        uint32_t t;
         memset(tr, 0, sizeof tr);
+        for (t = 0; t < MAXCH; t++) { cs[t].t = (uint16_t)(t < chan_n && ch_plain(t) ? seq_step * SEQ_PPS + seq_sub : 0u); cs[t].fmask = 0; }
         seq_left = seq_frac = 0; seq_next = 255; seq_loop = 1; seq_pat = seq_view; seq_follow = 0;
         seq_hold = 1; seq_rate = 0;
         if (clk_mode == 1u) midi_send(0xFAu, 0, 0);
@@ -225,12 +295,13 @@ static int seq_dup_page(uint32_t p)              /* a copy of page p as a new la
 {
     if (page_n >= SEQ_PAGES || p >= page_n) return -1;
     memcpy(pat[page_n], pat[p], sizeof pat[p]);
+    sx_copy_page(p, page_n);
     return (int)page_n++;
 }
 static void seq_toggle(uint32_t track, uint32_t step, uint32_t note)    /* a key on a step: set that note, or clear the step if it already has it */
 {
     step_t *x = &pat[seq_view][track][step];
-    if (x->note == note) { x->note = 0; return; }
+    if (x->note == note) { x->note = 0; x->spare = 0; sx_clear_step(seq_view, track, step); return; }
     if (!x->note) { x->vel = 100; x->gate = 5; }
     x->note = (uint8_t)note;
 }
@@ -242,12 +313,14 @@ static void seq_chan_removed(uint32_t c)        /* a channel is gone: the tracks
         memmove(&pat[p][c], &pat[p][c + 1u], (MAXCH - 1u - c) * sizeof pat[p][0]);
         memset(&pat[p][MAXCH - 1u], 0, sizeof pat[p][0]);
     }
+    sx_chan_removed(c);
 }
 static void seq_clear(void)                     /* an empty project: no channels, one page */
 {
     chan_n = 0;
     memset(pat, 0, sizeof pat);
     memset(tr, 0, sizeof tr);
+    sx_busy = 1; sx_n = 0; sx_busy = 0;
     page_n = 1; seq_view = 0; seq_pat = 0; seq_next = 255; seq_step = seq_sub = 0; seq_slot = 0; seq_loop = 0; seq_follow = 0;
     song_len = 1; memset(song, 0, sizeof song);
     seq_bpm = 120;
@@ -256,7 +329,7 @@ static void seq_clear(void)                     /* an empty project: no channels
 static void seq_put(uint32_t p, uint32_t t, uint32_t s, uint32_t note, uint32_t vel, uint32_t gate)
 {
     step_t *x = &pat[p][t][s];
-    x->note = (uint8_t)note; x->vel = (uint8_t)vel; x->gate = (uint8_t)gate;
+    x->note = (uint8_t)note; x->vel = (uint8_t)vel; x->gate = (uint8_t)gate; x->spare = 0;
 }
 static int chan_add(uint32_t kind);
 static void fm_set(uint32_t c, uint32_t alg, uint32_t ratio, uint32_t index, uint32_t fb, uint32_t decay)      /* an FM channel's operators */

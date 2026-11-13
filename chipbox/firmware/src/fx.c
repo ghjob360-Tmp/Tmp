@@ -34,7 +34,7 @@ static void fx_press(uint32_t i)                /* main loop: a pad went down */
         if (seq_run) { uint32_t c; seq_rate = 0; seq_hold = 1; for (c = 0; c < chan_n; c++) ev_push(EV_OFF, c, 0, 0); }
         break;
     case FX_R8: case FX_R16: case FX_R32:
-        if (seq_run && !seq_hold) { rpt_step = seq_step; rpt_page = seq_pat; rpt_cnt = 0; fx_rpt = i == FX_R8 ? RPT[0] : i == FX_R16 ? RPT[1] : RPT[2]; }
+        if (seq_run && !seq_hold) { uint32_t t; for (t = 0; t < chan_n; t++) rpt_pos[t] = (uint8_t)ch_pos(t); rpt_step = seq_step; rpt_page = seq_pat; rpt_cnt = 0; fx_rpt = i == FX_R8 ? RPT[0] : i == FX_R16 ? RPT[1] : RPT[2]; }
         break;
     default: break;
     }

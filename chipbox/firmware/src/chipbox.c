@@ -801,8 +801,8 @@ static void app_main(void)
                     menu_on = 0; rack_force = 1; chip_drawn = ~0u;
                     if (menu_sel < 3u && sel < chan_n && chan_n < MAXCH && (c = chan_add(chan[sel].kind)) >= 0) {       /* 1 patch only, 2 patch and notes */
                         uint32_t p;
-                        chan[c].in = chan[sel].in; chan[c].fm = chan[sel].fm; chan[c].wcus = chan[sel].wcus; memcpy(chan[c].user, chan[sel].user, sizeof chan[c].user);
-                        if (menu_sel == 2u) for (p = 0; p < page_n; p++) memcpy(pat[p][c], pat[p][sel], sizeof pat[p][c]);
+                        chan[c].in = chan[sel].in; chan[c].fm = chan[sel].fm; chan[c].wcus = chan[sel].wcus; memcpy(chan[c].user, chan[sel].user, sizeof chan[c].user); chan[c].x = chan[sel].x;
+                        if (menu_sel == 2u) { for (p = 0; p < page_n; p++) memcpy(pat[p][c], pat[p][sel], sizeof pat[p][c]); sx_copy_chan(sel, (uint32_t)c, page_n); }
                         sel = (uint32_t)c; proj_edited(); rack_inval = 1;
                         anim_start(AN_ADD, KIND_CHIP[chan[c].kind] | (uint32_t)c << 8);
                     }
@@ -975,6 +975,7 @@ static void app_main(void)
                         if (sh < 0) sh += (int32_t)SEQ_LEN;
                         memcpy(tmp, pat[seq_view][sel], sizeof tmp);
                         for (j = 0; j < (int32_t)SEQ_LEN; j++) pat[seq_view][sel][(j + sh) % (int32_t)SEQ_LEN] = tmp[j];
+                        sx_rotate(seq_view, sel, sh);
                     } else if (!IS_DRUM(chan[sel].kind)) { ri->duck = (uint8_t)clamp_i((int32_t)ri->duck + e, 0, 15); rack_bar_t = fm1_ms | 1u; rack_bar_row = sel; }      /* knob 4: the sidechain, how far a kick pulls it down */
                     rack_inval = 1; proj_edited();
                 }

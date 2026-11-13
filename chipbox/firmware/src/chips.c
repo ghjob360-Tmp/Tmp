@@ -112,19 +112,7 @@ static const inst_t INST_DEF[KINDS] = {
 };
 static const char *const KIND_NAME[KINDS] = {"PU", "TRI", "PU", "WAV", "TN", "PCE", "TIA", "PU", "SAW", "AY", "FM", "VB", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "POK", "SPK", "OPL", "WSG", "N16", "5B", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "MM5", "FDS", "SCC", "YM", "DRM", "DRM", "DRM", "DRM", "VR7", "OPM", "OP3", "WS", "DRM", "DRM", "DRM", "DRM", "SAA", "VIC", "TED", "LYN", "DRM", "DRM", "DRM", "DRM", "FM", "SSG", "FM", "SSG", "NGP", "MA", "OPZ", "77", "C30", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "DRM", "ORG", "ZX", "DRM", "DRM", "FM", "SSG", "DRM", "SID", "DRM", "NOI", "NOI", "NOI", "NOI"};
 
-/* the arp's chords: octave, major, minor, maj7, min7, sus4, power, dim */
-static const uint8_t ARP_N[8] = {2, 4, 4, 4, 4, 4, 4, 4};
-static const int8_t ARP_IV[8][4] = {
-    {0, 12, 0, 12}, {0, 4, 7, 12}, {0, 3, 7, 12}, {0, 4, 7, 11}, {0, 3, 7, 10}, {0, 5, 7, 12}, {0, 7, 12, 19}, {0, 3, 6, 9},
-};
-static const uint8_t ARP_TICKS[4] = {6, 4, 3, 2};               /* 60 Hz ticks per arp note: 10, 15, 20, 30 a second */
-static uint32_t arp_offset(uint32_t shape, uint32_t dir, uint32_t k)      /* semitones above the note, for the k-th arp note */
-{
-    uint32_t n = ARP_N[shape - 1u], i;
-    if (dir == 2u && n > 1u) { k %= 2u * n - 2u; i = k < n ? k : 2u * n - 2u - k; }
-    else { i = k % n; if (dir == 1u) i = n - 1u - i; }
-    return (uint32_t)ARP_IV[shape - 1u][i];
-}
+#include "ext_def.h"
 
 /* ---- the channels */
 /* the FM chips' own registers (fm.c): per operator and per channel, raw values of the chip's fields */
@@ -147,13 +135,13 @@ static uint32_t fm_fam(uint32_t k)
     }
 }
 #define IS_FMK(k) (fm_fam(k) != FAM_NONE)
-typedef struct { uint8_t kind; inst_t in; fmp_t fm; uint8_t wcus; uint8_t user[64]; } chan_t;       /* wcus: a drawn wave (draw.c) plays from user instead of the generator */
+typedef struct { uint8_t kind; inst_t in; fmp_t fm; uint8_t wcus; uint8_t user[64]; ext_t x; } chan_t;       /* x: the synthwave extensions (ext_def.h) */       /* wcus: a drawn wave (draw.c) plays from user instead of the generator */
 static chan_t chan[MAXCH];
 static uint32_t chan_n;
 static volatile uint32_t chan_lock;             /* set while the main loop changes the channel list: the audio side stands still */
 
 /* ---- the event queue: main loop -> audio ISR (one writer each side) */
-enum { EV_ON, EV_OFF, EV_LEG };
+enum { EV_ON, EV_OFF, EV_LEG, EV_SLIDE, EV_OFFN, EV_ADD };
 static struct { uint8_t op, ch, a, b; } evq[32];
 static volatile uint32_t ev_w, ev_r;
 static void ev_push(uint32_t op, uint32_t ch, uint32_t a, uint32_t b)
@@ -166,6 +154,7 @@ static void ev_push(uint32_t op, uint32_t ch, uint32_t a, uint32_t b)
 static void chip_note(uint32_t c, uint32_t note, uint32_t vel) { ev_push(EV_ON, c, note, vel); }
 static void chip_off(uint32_t c) { ev_push(EV_OFF, c, 0, 0); }
 static void chip_slide(uint32_t c, uint32_t note) { ev_push(EV_LEG, c, note, 0); }      /* a new pitch under the sounding note: no new attack */
+static void chip_off_note(uint32_t c, uint32_t note) { ev_push(EV_OFFN, c, note, 0); }     /* one key of a chord let go */
 
 static volatile int32_t live_bend[MAXCH], live_mod[MAXCH];   /* the keyboard's pitch wheel (1/256 semitone) and mod wheel (0..127), per channel: the main loop writes, the tick reads */
 static uint8_t live_ph[MAXCH];
@@ -183,11 +172,17 @@ static struct {
     uint32_t oa[4], lph;                        /* the FM kinds: each operator's attenuation (Q8, 0.09375 dB units), the LFO's phase */
     uint8_t os[4];                              /* ... and its envelope stage */
     inst_t in;
+    uint8_t ahold, lkt, lkv, slide;             /* ext: the arp's gate is shut (the key is still down); the step's lock (target, value); a slide is on its way */
+    uint16_t lph2, fenv;                        /* the second LFO's phase; the filter's envelope (0..4096) */
+    int16_t lsh, lfo2;                          /* the LFO's held level (S&H), its value now */
+    int32_t gl;                                 /* glide: the pitch now, Q8 semitones (0: none yet) */
+    uint8_t pw_base, wv_base;                   /* the duty and wave the note began with (the LFO moves them) */
 } vc[MAXCH];
 static struct { uint32_t ph, inc; const uint8_t *wav; uint8_t duty, vol, pan, wshift; uint32_t ph2, ph3, ph4, inc2, inc3, inc4, idx, rng, fbm; uint16_t gain; int32_t y1, y2; uint8_t alg, fb; } osc[MAXCH];
 #define AWAKE 30u                               /* ticks a chip keeps rendering after its last voice ends */
 static uint8_t awake[CHIPS], booted;
 static uint32_t tick_left, tick_len = FS / 60u;
+#include "ext.c"
 
 static uint32_t interp32(const uint32_t *T, uint32_t pq)
 {
@@ -1386,12 +1381,11 @@ static volatile int32_t fx_pitch;                /* all voices, Q8 semitones: th
 static volatile uint8_t fx_solo_ch = 255;        /* solo (fx.c): the one channel left sounding (255: none) */
 static volatile uint32_t duck_lvl;              /* the sidechain: 256 on a kick, down to 0 over about 180 ms (tick) */
 static volatile uint8_t duck_ch = 255;           /* while recording: the channel being played stays loud, the others are ducked (255: none) */
+static uint32_t voice_out(uint32_t c, uint32_t adv);
 static uint32_t tick_voice(uint32_t c)           /* returns 1 while the voice still sounds */
 {
     const inst_t *in = &vc[c].in;
-    int32_t pq, lfo = 0;
-    if (live_dirty[c]) { live_dirty[c] = 0; vc[c].in = chan[c].in; }
-    uint32_t vol;
+    if (live_dirty[c]) { live_dirty[c] = 0; vc[c].in = chan[c].in; lk_apply_in(c); vc[c].pw_base = vc[c].in.duty; }
     if (IS_DRUM(chan[c].kind)) {                    /* the hits ring on their own: the voice sounds while one does */
         uint32_t j, on = 0;
         for (j = 0; j < DVN; j++) on |= dv[c][j].on;
@@ -1422,27 +1416,66 @@ static uint32_t tick_voice(uint32_t c)           /* returns 1 while the voice st
     default: break;
     }
     if (vc[c].age < 65535u) vc[c].age++;
-    if (chan[c].kind != KD_FDS) vc[c].bend += (int32_t)in->sweep * 4;      /* (the FDS uses the sweep for its modulator) */
-    if (in->vib_dep) { vc[c].vph = (uint8_t)(vc[c].vph + in->vib_spd * 8u); lfo = (VIB[vc[c].vph >> 3] * (int32_t)in->vib_dep) >> 3; }
-    if (in->arp && in->arp <= 8u && vc[c].on) {                  /* the arp: a new chord note every few ticks while the key is down */
-        if (++vc[c].arp_t >= ARP_TICKS[in->arp_rate & 3u]) { vc[c].arp_t = 0; vc[c].arp_k++; }
-        vc[c].arp_off = (uint8_t)arp_offset(in->arp, in->arp_dir, vc[c].arp_k);
+    return voice_out(c, 1);
+}
+static void voice_retrig(uint32_t c);
+static void voice_gate_off(uint32_t c);
+static void arp_adv(uint32_t c, uint32_t per)  /* one arp clock (a 60 Hz tick, or a 24-a-beat tick when in time): the next note when its time comes; the gate shuts part way */
+{
+    const uint32_t g = chan[c].x.agate, gt = per * g / 8u;
+    if (++vc[c].arp_t >= per) {
+        vc[c].arp_t = 0; vc[c].arp_k++;
+        vc[c].arp_off = (uint8_t)arp_offset_x(c, vc[c].in.arp, vc[c].in.arp_dir, vc[c].arp_k);
+        if (vc[c].ahold) voice_retrig(c);
+    } else if (g && g < 8u && vc[c].on && vc[c].arp_t == (gt ? gt : 1u)) voice_gate_off(c);
+}
+static uint32_t voice_out(uint32_t c, uint32_t adv)      /* the pitch and the level into the oscillator; adv: a 60 Hz tick (the LFOs, the glide and the free arp move on) */
+{
+    const inst_t *in = &vc[c].in;
+    const ext_t *x = &chan[c].x;
+    int32_t pq, lfo = 0, tgt;
+    uint32_t vol;
+    if (adv) {
+        if (chan[c].kind != KD_FDS) vc[c].bend += (int32_t)in->sweep * 4;      /* (the FDS uses the sweep for its modulator) */
+        if (in->vib_dep) vc[c].vph = (uint8_t)(vc[c].vph + in->vib_spd * 8u);
+        if (in->arp && in->arp <= ARPS && in->arp_rate < AR_SYNC && (vc[c].on || vc[c].ahold)) arp_adv(c, ARP_TICKS[in->arp_rate & 3u]);
+        vc[c].lfo2 = x->ltgt ? (int16_t)lfo2_step(c) : 0;
+        vc[c].fenv = (uint16_t)((uint32_t)vc[c].fenv * FDK[x->fdec & 15u] >> 16);
+        if (live_mod[c]) live_ph[c] = (uint8_t)(live_ph[c] + 24u);
     }
-    if (live_mod[c]) { live_ph[c] = (uint8_t)(live_ph[c] + 24u); lfo += (VIB[live_ph[c] >> 3] * live_mod[c]) >> 6; }      /* the mod wheel: vibrato */
-    pq = (((int32_t)vc[c].note + vc[c].arp_off) << 8) + vc[c].bend + lfo + live_bend[c] + fx_pitch;
+    if (in->vib_dep) lfo = (VIB[vc[c].vph >> 3] * (int32_t)in->vib_dep) >> 3;
+    if (live_mod[c]) lfo += (VIB[live_ph[c] >> 3] * live_mod[c]) >> 6;      /* the mod wheel: vibrato */
+    if (x->ltgt == LT_PITCH) lfo += (vc[c].lfo2 * (int32_t)x->ldep * (int32_t)x->ldep) >> 4;
+    tgt = ((int32_t)vc[c].note + (in->arp && in->arp <= ARPS ? vc[c].arp_off : 0)) << 8;
+    if (vc[c].gl && (x->glide || vc[c].slide) && vc[c].gl != tgt) {          /* glide: the pitch moves towards the note */
+        if (adv) {
+            const int32_t d = tgt - vc[c].gl, st = d * (int32_t)GL_K[x->glide ? x->glide & 15u : 4u] / 256;
+            vc[c].gl += st ? st : (d > 0 ? 1 : -1);
+            if ((d > 0 ? d : -d) < 4) vc[c].gl = tgt;
+        }
+    } else { vc[c].gl = tgt; vc[c].slide = 0; }
+    pq = vc[c].gl + vc[c].bend + lfo + live_bend[c] + fx_pitch;
     pq = pq < 0 ? 0 : pq > (127 << 8) ? 127 << 8 : pq;
+    if (x->ltgt == LT_PWM && x->ldep) {          /* the LFO on the pulse's width */
+        const uint32_t k = chan[c].kind, mx = k == KD_VRC6_PU || k == KD_ZX ? 7u : 3u;
+        if (k == KD_NES_PU || k == KD_GB_PU || k == KD_VRC6_PU || k == KD_MMC5 || k == KD_ZX) {
+            int32_t d = (int32_t)vc[c].pw_base + vc[c].lfo2 * (int32_t)x->ldep * (int32_t)(mx + 1u) / 3840;
+            vc[c].in.duty = (uint8_t)(d < 0 ? 0 : d > (int32_t)mx ? (int32_t)mx : d);
+        }
+    }
     vol = ((uint32_t)vc[c].env * ((uint32_t)vc[c].vel + 1u)) >> 15;
     if (vol > 15u) vol = 15u;
     vol = (vol * ((in->vol > 15u ? 15u : (uint32_t)in->vol) + 1u)) >> 4;
     vol_q = ((uint32_t)vc[c].env * ((uint32_t)vc[c].vel + 1u)) >> 11;
     if (vol_q > 240u) vol_q = 240u;
     vol_q = (vol_q * ((in->vol > 15u ? 15u : (uint32_t)in->vol) + 1u)) >> 4;
+    if (x->ltgt == LT_VOL && x->ldep) { const uint32_t g = 256u - ((uint32_t)x->ldep * 17u * (uint32_t)(256 - vc[c].lfo2) >> 9); vol = (vol * g + 128u) >> 8; vol_q = vol_q * g >> 8; }       /* tremolo */
     if (duck_ch != 255u && c != duck_ch) { vol = vol * 5u >> 4; vol_q = vol_q * 5u >> 4; }       /* about -10 dB */
     if (in->duck && duck_lvl) { const uint32_t g = 256u - ((in->duck > 15u ? 15u : (uint32_t)in->duck) * 17u * duck_lvl >> 8); vol = vol * g >> 8; vol_q = vol_q * g >> 8; }       /* the sidechain: a kick pulls it down, it comes back in about 180 ms */
     if (fx_solo_ch != 255u && c != fx_solo_ch) { vol = 0; vol_q = 0; }
     set_osc(c, (uint32_t)pq, vol);
     if (chan[c].kind == KD_SID) vc[c].env = (uint16_t)(sid[c].env * 15u);       /* what the meter shows */
-    return vc[c].stage != ST_IDLE;
+    return vc[c].stage != ST_IDLE || vc[c].ahold;
 }
 static void fx_tick(void);
 static void fx_master(int32_t *out, uint32_t n);
@@ -1461,30 +1494,78 @@ static void tick(void)
         else if (!--awake[chip]) chip_clear(chip);   /* silent for a while: stop rendering, start clean next time */
     }
 }
+static uint8_t lk_pt[MAXCH], lk_pv[MAXCH];      /* the sequencer's lock for the note it is about to start (target, value): ev_do takes it */
+static void va_on(uint32_t c, uint32_t note, uint32_t vel, uint32_t add);
+static void va_off(uint32_t c, uint32_t note);
+static uint32_t is_va(uint32_t k);
+static void voice_retrig(uint32_t c)            /* the arp's gate opens again: a new attack on the note that is held */
+{
+    vc[c].on = 1; vc[c].ahold = 0; vc[c].trig = 1; vc[c].age = 0; vc[c].fenv = 4096u;
+    vc[c].stage = ST_ATK;
+    if (!vc[c].in.atk) { vc[c].env = 3840u; vc[c].stage = ST_DEC; }
+    if (IS_FMK(chan[c].kind)) fm_keyon(c);
+    if (is_va(chan[c].kind)) va_on(c, vc[c].note, vc[c].vel, 2u);
+}
+static void voice_gate_off(uint32_t c)          /* the arp's gate shuts: the note lets go, the arp goes on */
+{
+    vc[c].on = 0; vc[c].ahold = 1;
+    vc[c].stage = vc[c].stage == ST_IDLE ? ST_IDLE : ST_REL;
+    if (is_va(chan[c].kind)) va_off(c, 255u);
+}
 static void ev_do(uint32_t op, uint32_t c, uint32_t a, uint32_t b)
 {
     uint32_t chip;
     if (c >= chan_n) return;
     chip = KIND_CHIP[chan[c].kind];
+    if (op == EV_SLIDE && (!vc[c].on || IS_DRUM(chan[c].kind))) { op = EV_ON; vc[c].slide = 1; }      /* a slide on a note that let go: a new note that glides there */
+    if (op == EV_ADD) {                          /* another note of a chord, on a channel that plays chords itself */
+        if (is_va(chan[c].kind)) va_on(c, a, b, 1u);
+        return;
+    }
     if (op == EV_ON) {
+        const uint8_t sl = vc[c].slide;
         awake[chip] = AWAKE;
         vc[c].in = chan[c].in;
+        vc[c].lkt = lk_pt[c]; vc[c].lkv = lk_pv[c]; lk_pt[c] = 0;
+        lk_apply_in(c);
+        vc[c].pw_base = vc[c].in.duty;
         if (IS_DRUM(chan[c].kind)) dv_hit(c, a, b);
         if (chan[c].kind == KD_SAA) osc[c].y1 = 0;
         if (chan[c].kind == KD_S5B || chan[c].kind == KD_AY || chan[c].kind == KD_PC98_SSG || chan[c].kind == KD_NEO_SSG || chan[c].kind == KD_OPN_SSG) osc[c].ph3 = 0;       /* the envelope starts with the note, as a write to the chip's register 13 does */
-        vc[c].on = 1; vc[c].trig = 1; vc[c].age = 0; vc[c].note = (uint8_t)a; vc[c].vel = (uint8_t)b; vc[c].bend = 0; vc[c].vph = 0;
-        vc[c].arp_t = 0; vc[c].arp_k = 0; vc[c].arp_off = 0;
-        vc[c].stage = ST_ATK; vc[c].env = 0;
+        vc[c].on = 1; vc[c].ahold = 0; vc[c].trig = 1; vc[c].age = 0; vc[c].note = (uint8_t)a; vc[c].vel = (uint8_t)b; vc[c].bend = 0; vc[c].vph = 0;
+        vc[c].arp_t = 0; vc[c].arp_k = 0; vc[c].arp_off = vc[c].in.arp && vc[c].in.arp <= ARPS ? (uint8_t)arp_offset_x(c, vc[c].in.arp, vc[c].in.arp_dir, 0) : 0u;
+        vc[c].stage = ST_ATK; vc[c].env = 0; vc[c].fenv = 4096u; vc[c].slide = sl;
         if (!vc[c].in.atk) { vc[c].env = 3840u; vc[c].stage = ST_DEC; }
         if (IS_FMK(chan[c].kind)) fm_keyon(c);
+        if (is_va(chan[c].kind)) va_on(c, a, b, 0u);
         tick_voice(c);                           /* sound at once, not up to 16 ms later */
-    } else if (op == EV_LEG) {
-        if (vc[c].on && !IS_DRUM(chan[c].kind)) vc[c].note = (uint8_t)a;
+    } else if (op == EV_LEG || op == EV_SLIDE) {
+        if (vc[c].on && !IS_DRUM(chan[c].kind)) {
+            vc[c].note = (uint8_t)a;
+            if (op == EV_SLIDE) { vc[c].slide = 1; vc[c].lkt = lk_pt[c]; vc[c].lkv = lk_pv[c]; lk_pt[c] = 0; }
+            if (is_va(chan[c].kind)) va_on(c, a, vc[c].vel, 3u);
+        }
+    } else if (op == EV_OFFN) {                  /* one key of a chord let go (a channel that plays chords) */
+        if (is_va(chan[c].kind)) va_off(c, a);
+        if (a == vc[c].note && awake[chip]) { vc[c].on = 0; vc[c].ahold = 0; vc[c].stage = vc[c].stage == ST_IDLE ? ST_IDLE : ST_REL; }
     } else if (awake[chip]) {
-        vc[c].on = 0;
+        vc[c].on = 0; vc[c].ahold = 0;
         vc[c].stage = vc[c].stage == ST_IDLE ? ST_IDLE : ST_REL;
+        if (is_va(chan[c].kind)) va_off(c, 255u);
     }
 }
+static void arp_pulse(void)                     /* 24 a beat: the arps that run in time */
+{
+    uint32_t c;
+    for (c = 0; c < chan_n; c++) {
+        const inst_t *in = &vc[c].in;
+        if (in->arp && in->arp <= ARPS && in->arp_rate >= AR_SYNC && (vc[c].on || vc[c].ahold) && !IS_DRUM(chan[c].kind) && awake[KIND_CHIP[chan[c].kind]]) {
+            arp_adv(c, ARP_SYNC_T[(in->arp_rate - AR_SYNC) % 7u]);
+            voice_out(c, 0);
+        }
+    }
+}
+#include "va.c"
 #include "seq.c"
 #include "fx.c"
 
@@ -1496,6 +1577,7 @@ static int chan_add(uint32_t kind)               /* the new channel's number, or
     chan_lock = 1;
     c = chan_n;
     chan[c].kind = (uint8_t)kind; chan[c].in = INST_DEF[kind]; fm_default(kind, &chan[c].fm); chan[c].wcus = 0;
+    memset(&chan[c].x, 0, sizeof chan[c].x); ext_default(kind, &chan[c].x); chan[c].in.arp_rate = X_RATE_DEF;       /* a new channel's arp runs in time */
     memset(&vc[c], 0, sizeof vc[c]); vc[c].stage = ST_IDLE; memset(&fmo[c], 0, sizeof fmo[c]);
     memset(&osc[c], 0, sizeof osc[c]); osc[c].pan = 1; wkey[c] = 0; memset(dv[c], 0, sizeof dv[c]); memset(&sid[c], 0, sizeof sid[c]);
     chan_n++;
@@ -1509,6 +1591,9 @@ static void chan_set_kind(uint32_t c, uint32_t kind)   /* the channel becomes an
     chan_lock = 1;
     if (IS_DRUM(chan[c].kind) != IS_DRUM(kind)) for (p = 0; p < SEQ_PAGES; p++) memset(pat[p][c], 0, sizeof pat[p][c]);
     chan[c].kind = (uint8_t)kind; chan[c].in = INST_DEF[kind]; fm_default(kind, &chan[c].fm); chan[c].wcus = 0;
+    {   const ext_t keep = chan[c].x;                   /* the sound's extras start fresh; how the channel's steps run stays */
+        memset(&chan[c].x, 0, sizeof chan[c].x); ext_default(kind, &chan[c].x); chan[c].in.arp_rate = X_RATE_DEF;
+        chan[c].x.speed = keep.speed; chan[c].x.len = keep.len; chan[c].x.lkt = keep.lkt; chan[c].x.chv = keep.chv; }
     memset(&vc[c], 0, sizeof vc[c]); vc[c].stage = ST_IDLE; memset(&fmo[c], 0, sizeof fmo[c]);
     memset(&osc[c], 0, sizeof osc[c]); osc[c].pan = 1; wkey[c] = 0; memset(dv[c], 0, sizeof dv[c]); memset(&sid[c], 0, sizeof sid[c]);
     chan_lock = 0;
@@ -1556,7 +1641,17 @@ static void chip_render(int32_t *out, uint32_t n)
             if (seq_left > 0x20000000u) seq_left = 0;   /* the outside clock went: our own is back */
             while (seq_run && !seq_hold && !seq_left) { seq_off = i; seq_tick(); seq_left = seq_period(); }
         }
-        run = n - i < tick_left ? n - i : tick_left;
+        if (!(seq_run && !seq_hold)) {                  /* the sequencer stands still: the arps keep time by a clock of their own */
+            static uint32_t aclk_left, aclk_frac;
+            if (!aclk_left) {
+                const uint32_t bpm = seq_bpm < 40u ? 40u : seq_bpm > 240u ? 240u : seq_bpm, q = ((FS * 5u / 2u) << 8) / bpm + aclk_frac;
+                arp_pulse();
+                aclk_frac = q & 255u; aclk_left = q >> 8;
+            }
+            run = n - i < tick_left ? n - i : tick_left;
+            if (run > aclk_left) run = aclk_left;
+            aclk_left -= run;
+        } else run = n - i < tick_left ? n - i : tick_left;
         if (seq_run && !seq_hold && run > seq_left) run = seq_left;
         if (run > 256u) run = 256u;
         for (chip = 0; chip < CHIPS; chip++) {
