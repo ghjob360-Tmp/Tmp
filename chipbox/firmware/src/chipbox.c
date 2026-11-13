@@ -278,15 +278,18 @@ static void x_knob(uint32_t c, uint32_t pg, uint32_t k, int32_t d)
 }
 static uint32_t base_pages(uint32_t c) { return IS_DRUM(chan[c].kind) ? 1u : chan[c].kind == KD_SID ? 5u : chan[c].kind == KD_FDS ? 5u : has_wave(c) || has_fm(c) || chan[c].kind == KD_S5B ? 4u : 3u; }       /* the SID has two more: pulse and sync, filter */                  /* pages of knobs */
 static uint32_t wd_pg(uint32_t c) { return wd_ok(chan[c].kind) ? base_pages(c) + x_n(chan[c].kind) : 99u; }          /* the DRAW page: the last one, on a kind with a writable wave */
-static uint32_t pages(uint32_t c) { return IS_FMK(chan[c].kind) ? fm_pages(c, fm_foc) : base_pages(c) + x_n(chan[c].kind) + (wd_ok(chan[c].kind) ? 1u : 0u); }
+static uint32_t ep_n(uint32_t c);
+static uint32_t ep_first(uint32_t c) { return IS_FMK(chan[c].kind) ? fm_pages(c, 0) : base_pages(c) + x_n(chan[c].kind) + (wd_ok(chan[c].kind) ? 1u : 0u); }      /* where the extra pages (epages.c) begin */
+static uint32_t pages(uint32_t c) { return IS_FMK(chan[c].kind) ? fm_pages(c, fm_foc) + (fm_foc ? 0u : ep_n(c)) : ep_first(c) + ep_n(c); }
 static uint32_t wd_cmax(uint32_t c) { return wd_n(c) - 1u; }
 static uint32_t wd_dsteps(uint32_t kind) { return wd_top(kind) > 63u ? 4u : 1u; }               /* a click: one step, four on the 8 bit wave */
 static uint32_t has_k1(uint32_t c)                                                               /* knob 1 does something on the tone page */
 {
-    return has_wave(c) || has_duty(c) || has_fm(c) || chan[c].kind == KD_SID || chan[c].kind == KD_TIA || chan[c].kind == KD_AY || chan[c].kind == KD_POKEY || chan[c].kind == KD_S5B || IS_OPLL(chan[c].kind) || chan[c].kind == KD_SAA || chan[c].kind == KD_TED || chan[c].kind == KD_VIC || chan[c].kind == KD_LYNX || chan[c].kind == KD_PC98_SSG || chan[c].kind == KD_NEO_SSG || chan[c].kind == KD_OPN_SSG || chan[c].kind == KD_SN77 || chan[c].kind == KD_MSM || chan[c].kind == KD_VRC6_SAW || chan[c].kind == KD_SMS || chan[c].kind == KD_NGP || IS_NZK(chan[c].kind);
+    return has_wave(c) || has_duty(c) || has_fm(c) || chan[c].kind == KD_SID || chan[c].kind == KD_TIA || chan[c].kind == KD_AY || chan[c].kind == KD_POKEY || chan[c].kind == KD_S5B || IS_OPLL(chan[c].kind) || chan[c].kind == KD_SAA || chan[c].kind == KD_TED || chan[c].kind == KD_VIC || chan[c].kind == KD_LYNX || chan[c].kind == KD_PC98_SSG || chan[c].kind == KD_NEO_SSG || chan[c].kind == KD_OPN_SSG || chan[c].kind == KD_SN77 || chan[c].kind == KD_MSM || chan[c].kind == KD_VRC6_SAW || chan[c].kind == KD_SMS || chan[c].kind == KD_NGP || IS_NZK(chan[c].kind) || is_va(chan[c].kind);
 }
-static uint32_t has_pan(uint32_t c) { uint32_t ch = KIND_CHIP[chan[c].kind]; return (ch == CHIP_GB || ch == CHIP_PCE || ch == CHIP_MD || ch == CHIP_VB || ch == CHIP_OPM || ch == CHIP_WS || ch == CHIP_SAA || ch == CHIP_LYNX || ch == CHIP_PC98 || ch == CHIP_NEO || ch == CHIP_NGP || ch == CHIP_C30) && chan[c].kind != KD_PC98_SSG && chan[c].kind != KD_NEO_SSG && !IS_DRUM(chan[c].kind); }
+static uint32_t has_pan(uint32_t c) { uint32_t ch = KIND_CHIP[chan[c].kind]; return (ch == CHIP_GB || ch == CHIP_PCE || ch == CHIP_MD || ch == CHIP_VB || ch == CHIP_OPM || ch == CHIP_WS || ch == CHIP_SAA || ch == CHIP_LYNX || ch == CHIP_PC98 || ch == CHIP_NEO || ch == CHIP_NGP || ch == CHIP_C30 || ch == CHIP_VA || ch == CHIP_SNES || ch == CHIP_AMIGA) && chan[c].kind != KD_PC98_SSG && chan[c].kind != KD_NEO_SSG && !IS_DRUM(chan[c].kind); }
 static int8_t clamp_i(int32_t v, int32_t lo, int32_t hi) { return (int8_t)(v < lo ? lo : v > hi ? hi : v); }
+#include "epages.c"
 static void wd_knob(uint32_t c, uint32_t k, int32_t d)         /* the DRAW page: LEVEL of the sample under the cursor, BRUSH, MIRROR */
 {
     if (dr_cur > wd_cmax(c)) dr_cur = wd_cmax(c);
@@ -297,7 +300,9 @@ static void wd_knob(uint32_t c, uint32_t k, int32_t d)         /* the DRAW page:
 static void knob_set(uint32_t c, uint32_t page, uint32_t k, int32_t d)      /* knob k of a page of cards, on channel c */
 {
     inst_t *in = &chan[c].in;
+    if ((!IS_FMK(chan[c].kind) || !fm_foc) && page >= ep_first(c)) { ep_knob(c, page - ep_first(c), k, d); return; }       /* the extra pages */
     if (IS_FMK(chan[c].kind)) { fm_knob(c, page, k, d); return; }
+    if (is_va(chan[c].kind) && page == 0u && k == 0u) { chan[c].x.va[0] = (uint8_t)clamp_i((int32_t)chan[c].x.va[0] + d, 0, chan[c].kind == KD_VA ? 3 : (int32_t)SAMPLES - 1); live_dirty[c] = 1; return; }      /* the VA's first wave, the samplers' instrument */
     if (page == wd_pg(c)) { wd_knob(c, k, d); return; }
     if (chan[c].wcus && wd_ok(chan[c].kind) && (page == 3u || (page == 0u && k == 0u))) chan[c].wcus = 0;       /* a knob of the generator: back to the generated wave (undo brings the drawing back) */
     if (page >= base_pages(c) && !IS_DRUM(chan[c].kind)) { x_knob(c, page - base_pages(c), k, d); return; }
@@ -327,10 +332,7 @@ static void knob_set(uint32_t c, uint32_t page, uint32_t k, int32_t d)      /* k
         uint8_t *p = k == 0u ? &in->atk : k == 1u ? &in->dec : k == 2u ? &in->sus : &in->rel;
         *p = (uint8_t)clamp_i((int32_t)*p + d, 0, 15);
     } else if (page == 2u) {                                    /* the arp: chord, speed, direction */
-        if (k == 0u) in->arp = (uint8_t)clamp_i((int32_t)in->arp + d, 0, 8);
-        else if (k == 1u) in->arp_rate = (uint8_t)clamp_i((int32_t)in->arp_rate + d, 0, 3);
-        else if (k == 2u) in->arp_dir = (uint8_t)clamp_i((int32_t)in->arp_dir + d, 0, 2);
-        else in->vib_spd = (uint8_t)clamp_i((int32_t)in->vib_spd + d, 0, 15);                  /* VSPD: how fast the vibrato goes */
+        if (!arp_knob(in, k, d)) in->vib_spd = (uint8_t)clamp_i((int32_t)in->vib_spd + d, 0, 15);                  /* VSPD: how fast the vibrato goes */
     } else if (k == 0u) {                                       /* the tone: wave or duty, volume, vibrato, sweep or pan */
         int32_t v;
         if (has_wave(c)) { v = ((int32_t)in->wave + 2) / 5 + (d < 0 ? -1 : 1); in->wave = (uint8_t)((v < 0 ? 0 : v > 3 ? 3 : v) * 5); }       /* pulse, saw, triangle, sine */

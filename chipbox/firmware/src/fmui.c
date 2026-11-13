@@ -61,7 +61,7 @@ static uint32_t fm_fmax(uint32_t fam, uint32_t id)
 {
     if (id < NOPF) return FMXO[fam][id];
     if (id >= 32u && id < 32u + NCHF) return FMXC[fam][id - 32u];
-    return id == FI_ARP0 ? 8u : id == FI_ARP1 ? 3u : id == FI_ARP2 ? 2u : 15u;
+    return id == FI_ARP0 ? ARPS : id == FI_ARP1 ? AR_MAX : id == FI_ARP2 ? AD_MAX : 15u;
 }
 static const char *fm_label(uint32_t fam, uint32_t id)
 {

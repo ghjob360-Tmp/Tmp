@@ -1,0 +1,33 @@
+# the VA synth's pages: added over MIDI (CC 106 = kind 86), the chip screen, its pages
+300 held 0x100
+350 held 0
+600 midi 0xB0 106 86
+1000 enc 6 1
+1050 enc 6 1
+1100 enc 6 1
+1150 enc 6 1
+1300 held 0x100
+1350 held 0
+1600 shot
+1700 enc 1 1
+1750 enc 1 1
+1800 enc 1 1
+2000 shot
+2100 enc 1 1
+2300 shot
+2400 enc 1 1
+2600 shot
+2700 enc 1 1
+2750 enc 1 1
+2800 keys 0x80
+3000 shot
+3100 keys 0
+3200 enc 1 1
+3400 shot
+3500 enc 1 1
+3550 enc 1 1
+3600 enc 1 1
+3800 shot
+3900 enc 1 1
+4100 shot
+4200 end

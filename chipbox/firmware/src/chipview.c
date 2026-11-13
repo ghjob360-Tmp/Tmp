@@ -518,7 +518,6 @@ static void chip_cards(const theme_t *t, uint32_t c, uint32_t page)
     static const char *const ARPL[4] = {"SHAPE", "RATE", "DIR", "VSPD"};
     static const char *const WAVL[4] = {"SHAPE", "FOLD", "STEP", "TWIST"};
     static const char *const FML[4] = {"RATIO", "INDEX", "FB", "DECAY"};
-    static const uint8_t BARS[4] = {2, 4, 6, 9};
     const inst_t *in = &chan[c].in;
     uint32_t chip = KIND_CHIP[chan[c].kind], k, k1 = has_k1(c), fm = has_fm(c);
     int32_t sw = in->sweep;
@@ -541,6 +540,7 @@ static void chip_cards(const theme_t *t, uint32_t c, uint32_t page)
             else if (k == 3u && kd == KD_NES_NOI) lab = "PERIOD";
         }
         if (page == 3u && chan[c].kind == KD_S5B) lab = k == 0u ? "PERIOD" : k == 1u ? "RATE" : k == 2u ? "MIXENV" : "";
+        if (page == 0u && k == 0u && is_va(chan[c].kind)) lab = chan[c].kind == KD_VA ? "WAVE" : "SAMPLE";
         if (chan[c].kind == KD_SID) { static const char *const SL3[4] = {"PW", "PWM", "SYNC", "RING"}, *const SL4[4] = {"CUT", "RES", "MODE", "FENV"}; if (page == 3u) lab = SL3[k]; else if (page == 4u) lab = SL4[k]; else if (page == 0u && k == 0u) lab = "WAVE"; else if (page == 0u && k == 3u) lab = "CHIP"; }
         lc = (page == 0u && ((k == 0u && !k1) || (k == 1u && !has_vol(c)))) || (page == 3u && chan[c].kind == KD_S5B && k == 0u && !in->wave) ? t->dim : t->fg;       /* (the 5B's PERIOD does nothing while its NOISE is 0) */
         if (chan[c].wcus && wd_ok(chan[c].kind) && (page == 3u || (page == 0u && k == 0u))) lc = t->dim;       /* the generator is not what plays now */
@@ -573,19 +573,11 @@ static void chip_cards(const theme_t *t, uint32_t c, uint32_t page)
                 for (i = 0; i < 32; i++) cv_rect(x + 8 + i * 40 / 32, 50 - wv[i] * 20 / 15, 2, 2, t->acc);
             } else card_bar(t, chip, x, k == 1u ? in->wf : k == 2u ? in->wc : in->wt, 15);
         } else if (page == 2u) {
-            if (k == 0u) {                                                      /* the chord's notes as dots, low to high; a dash is off */
-                if (!in->arp) cv_rect(x + 18, 42, 20, 3, t->dim);
-                else for (i = 0; i < (int32_t)ARP_N[in->arp - 1u]; i++) cv_rect(x + 8 + i * 11, 49 - ARP_IV[in->arp - 1u][i] * 3 / 2, 8, 4, t->acc);
-            } else if (k == 1u) {                                               /* faster: more bars */
-                int32_t n = BARS[in->arp_rate & 3u];
-                for (i = 0; i < n; i++) cv_rect(x + 8 + i * 40 / n, 32, 3, 18, in->arp ? t->acc : t->dim);
-            } else if (k == 3u) card_bar(t, chip, x, in->vib_spd, 15);          /* how fast the vibrato goes */
-            else {                                                              /* up, down, up and down */
-                uint32_t d = in->arp_dir;
-                uint16_t on = in->arp ? t->acc : t->dim;
-                tri_icon(x + 7, 32, 1, d == 0u ? on : t->dim);
-                tri_icon(x + 23, 32, 0, d == 1u ? on : t->dim);
-                tri_icon(x + 39, 28, 1, d == 2u ? on : t->dim); tri_icon(x + 39, 35, 0, d == 2u ? on : t->dim);
+            if (k == 3u) card_bar(t, chip, x, in->vib_spd, 15);                 /* how fast the vibrato goes */
+            else {                                                              /* the chord, the rate (in time from 1/4), the direction: in words */
+                const char *w = k == 0u ? ARP_NAME[in->arp <= ARPS ? in->arp : 0u] : k == 1u ? ARP_RATE_NAME[in->arp_rate <= AR_MAX ? in->arp_rate : 0u] : ARP_DIR_NAME[in->arp_dir <= AD_MAX ? in->arp_dir : 0u];
+                cv_text(x + (CV_CARD_W - text_w(&FONT_S, w)) / 2, 26, &FONT_S, w, in->arp ? t->acc : t->dim);
+                if (k == 0u && in->arp) { const uint32_t a = in->arp - 1u; for (i = 0; i < (int32_t)ARP_N[a] && i < 5; i++) cv_rect(x + 6 + i * 9, 50 - ARP_IV[a][i] * 2 / 3, 6, 3, t->acc); }
             }
         } else if (page == 1u) card_bar(t, chip, x, k == 0u ? in->atk : k == 1u ? in->dec : k == 2u ? in->sus : in->rel, 15);
         else if (k == 0u) {
@@ -605,6 +597,7 @@ static void chip_cards(const theme_t *t, uint32_t c, uint32_t page)
             else if (chan[c].kind == KD_LYNX) card_bar(t, chip, x, in->wave, 7);
             else if (fm && (chan[c].kind == KD_OPM || chan[c].kind == KD_PC98_FM || chan[c].kind == KD_NEO_FM || chan[c].kind == KD_OPN_FM || chan[c].kind == KD_OPZ || chan[c].kind == KD_MD)) { for (i = 0; i < 8; i++) cv_rect(x + 6 + i * 6, 34, 5, 12, i == (int32_t)in->duty ? t->acc : t->dim); }       /* which of eight */
             else if (fm) { for (i = 0; i < 4; i++) cv_rect(x + 6 + i * 12, 34, 10, 12, i == (int32_t)in->duty ? t->acc : t->dim); }       /* which of four */
+            else if (is_va(chan[c].kind)) { const char *w = chan[c].kind == KD_VA ? NM_W1[chan[c].x.va[0] & 3u] : SMP_NAME[chan[c].x.va[0] % SAMPLES]; cv_text(x + (CV_CARD_W - text_w(&FONT_S, w)) / 2, 26, &FONT_S, w, t->acc); }
             else if (k1) channel_glyph(c, x + 8, 26, 40, 26, t->acc);
         }
         else if (k == 1u) { if (has_vol(c)) card_bar(t, chip, x, in->vol, 15); }
@@ -708,19 +701,9 @@ static void fm_cards(const theme_t *t, uint32_t c, uint32_t page)
         v = *vp; mx = fm_fmax(fam, id);
         cv_text(x + (CV_CARD_W - text_w(&FONT_S, lab)) / 2, 4, &FONT_S, lab, t->fg);
         nb = fm_boxes(id, mx);
-        if (id == FI_ARP0) {                                                    /* the chord's notes as dots, low to high; a dash is off */
-            if (!in->arp) cv_rect(x + 18, 42, 20, 3, t->dim);
-            else for (i = 0; i < (uint32_t)ARP_N[in->arp - 1u]; i++) cv_rect(x + 8 + (int32_t)i * 11, 49 - ARP_IV[in->arp - 1u][i] * 3 / 2, 8, 4, t->acc);
-        } else if (id == FI_ARP1) {                                             /* faster: more bars */
-            static const uint8_t BARS[4] = {2, 4, 6, 9};
-            const int32_t n = BARS[in->arp_rate & 3u];
-            for (i = 0; i < (uint32_t)n; i++) cv_rect(x + 8 + (int32_t)i * 40 / n, 32, 3, 18, in->arp ? t->acc : t->dim);
-        } else if (id == FI_ARP2) {                                             /* up, down, up and down */
-            const uint32_t d = in->arp_dir;
-            const uint16_t on = in->arp ? t->acc : t->dim;
-            tri_icon(x + 7, 32, 1, d == 0u ? on : t->dim);
-            tri_icon(x + 23, 32, 0, d == 1u ? on : t->dim);
-            tri_icon(x + 39, 28, 1, d == 2u ? on : t->dim); tri_icon(x + 39, 35, 0, d == 2u ? on : t->dim);
+        if (id == FI_ARP0 || id == FI_ARP1 || id == FI_ARP2) {                  /* the arp: in words, as on the other chips */
+            const char *w = id == FI_ARP0 ? ARP_NAME[in->arp <= ARPS ? in->arp : 0u] : id == FI_ARP1 ? ARP_RATE_NAME[in->arp_rate <= AR_MAX ? in->arp_rate : 0u] : ARP_DIR_NAME[in->arp_dir <= AD_MAX ? in->arp_dir : 0u];
+            cv_text(x + (CV_CARD_W - text_w(&FONT_S, w)) / 2, 26, &FONT_S, w, in->arp ? t->acc : t->dim);
         } else if (nb) {
             const int32_t pitch = 46 / (int32_t)nb, wd = pitch > 4 ? pitch - 2 : pitch - 1;
             for (i = 0; i < nb; i++) cv_rect(x + 6 + (int32_t)i * pitch, 34, wd, 12, i == v ? t->acc : t->dim);
@@ -779,8 +762,67 @@ static void wd_cards(const theme_t *t, uint32_t c)               /* the DRAW pag
     }
     cv_blit(0, CV_CARDS_Y);
 }
+/* ---- the extra pages (epages.c): the panel names the page and draws what it can; a card shows its value in words */
+static void ep_panel(const theme_t *t, uint32_t c, uint32_t pg, uint32_t page, uint32_t np)
+{
+    const epg_t *e = ep_pg(c, pg);
+    const ext_t *x = &chan[c].x;
+    const uint32_t chip = KIND_CHIP[chan[c].kind];
+    const int32_t base = CV_ENV_H - 10;
+    int32_t i;
+    cv_begin(240, CV_ENV_H, t->bg);
+    skin_box(chip, t, 3, 0, 234, CV_ENV_H, t->bar);
+    { uint32_t d; for (d = 0; d < np; d++) cv_rect(204 - (int32_t)((np > 3u ? np : 3u) - 3u) * 6 + (int32_t)d * 6, 6, 4, 6, d == page ? t->acc : t->dim); }       /* which page of knobs */
+    cv_text(12, 4, &FONT_L, e->name, t->fg);
+    cv_text(12, 40, &FONT_S, e->hint, t->dim);
+    if (e == &EPG[EPG_FILT] && x->ftype) {          /* the response, roughly: flat, the bump at the cutoff, the slope */
+        const int32_t kx = 96 + (int32_t)x->fcut * 2, bump = (int32_t)x->fres;
+        for (i = 96; i < 228; i++) {
+            int32_t y, d = i - kx;
+            if (x->ftype == 3u) y = d < 0 ? 30 - d * (x->ftype == 4u ? 2 : 1) : 30;
+            else if (x->ftype == 2u) y = 30 + (d < 0 ? -d : d);
+            else y = d > 0 ? 30 + d * (x->ftype == 4u ? 2 : 1) : 30;
+            if (d > -6 && d < 6) y -= bump * (6 - (d < 0 ? -d : d)) / 6;
+            y = y < 8 ? 8 : y > base ? base : y;
+            cv_rect(i, y, 1, 2, t->acc);
+        }
+    } else if (e == &EPG[EPG_LFO] && x->ltgt) {     /* two turns of its shape */
+        for (i = 0; i < 120; i++) {
+            const int32_t ph = (i * 65536 / 60) & 65535;
+            int32_t v = x->lshape == 1u ? 256 - (ph >> 7) : x->lshape == 2u ? (ph < 32768 ? 256 : -256) : x->lshape == 3u ? ((i / 15 * 97) % 512) - 256 : x->lshape == 4u ? (ph >> 7) - 256 : (ph < 32768 ? -256 + (ph >> 6) : 768 - (ph >> 6));
+            cv_rect(108 + i, 36 - v * 26 / 256 * (int32_t)(x->ldep + 1u) / 16, 1, 2, t->acc);
+        }
+    } else if (e == &EPG[EPG_STEP]) {               /* the channel's steps against the page's 16 */
+        const uint32_t l = ch_len(c), sp = ch_spd(c);
+        for (i = 0; i < 16; i++) cv_rect(108 + i * 7, 14, 5, 6, t->dim);
+        for (i = 0; i < (int32_t)l && i * (int32_t)sp < 96 * 2; i++) { const int32_t xx = 108 + i * (int32_t)sp * 7 / 6; if (xx < 226) cv_rect(xx, 24, 4, 8, t->acc); }
+    }
+    cv_blit(0, CV_ENV_Y);
+}
+static void ep_cards(const theme_t *t, uint32_t c, uint32_t pg)
+{
+    const epg_t *e = ep_pg(c, pg);
+    const uint32_t chip = KIND_CHIP[chan[c].kind];
+    uint32_t k;
+    cv_begin(240, CV_CARDS_H, t->bg);
+    for (k = 0; k < 4u; k++) {
+        const int32_t x = CV_CARD_X(k);
+        const efd_t *f = &e->f[k];
+        char sv[10];
+        skin_box(chip, t, x, 0, CV_CARD_W, CV_CARDS_H, t->bar);
+        if (!f->lab[0]) continue;
+        cv_text(x + (CV_CARD_W - text_w(&FONT_S, f->lab)) / 2, 4, &FONT_S, f->lab, t->fg);
+        ep_text(c, f, sv);
+        cv_text(x + (CV_CARD_W - text_w(&FONT_S, sv)) / 2, 22, &FONT_S, sv, t->fg);
+        {   const int32_t v = ep_get(c, f) - f->lo, span = (int32_t)f->hi - f->lo;
+            cv_rect(x + 6, 44, CV_CARD_W - 12, 4, t->dim);
+            if (span > 0) cv_rect(x + 6, 44, (CV_CARD_W - 12) * v / span, 4, t->acc); }
+    }
+    cv_blit(0, CV_CARDS_Y);
+}
 static void chip_panels(const theme_t *t, uint32_t c, uint32_t page)
 {
+    if ((!IS_FMK(chan[c].kind) || !fm_foc) && page >= ep_first(c)) { chip_tabs(t, c); ep_panel(t, c, page - ep_first(c), page, pages(c)); ep_cards(t, c, page - ep_first(c)); return; }
     if (!IS_FMK(chan[c].kind) && page == wd_pg(c)) { chip_tabs(t, c); wd_panel(t, c, page, pages(c), 1u); wd_cards(t, c); return; }
     wd_c = c;
     if (!IS_FMK(chan[c].kind) && !IS_DRUM(chan[c].kind) && page >= base_pages(c)) {
