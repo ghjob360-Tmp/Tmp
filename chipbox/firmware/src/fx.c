@@ -24,6 +24,9 @@ static const uint16_t AP_LEN[2] = {225, 556};
 static int16_t vb_comb[VB_N][1617] POOL, vb_ap[2][556] POOL;
 static uint16_t vb_pos[VB_N], ap_pos[2];
 static int32_t vb_lp[VB_N];
+static int32_t sclip(int32_t v);
+static int32_t bus_cho[256u], bus_rev[256u], bus_dly[2u * 256u];       /* the sends, for this block (proc.c fills them, fx_master reads and clears them) */
+static uint32_t bus_used;                       /* bit 0 chorus, 1 delay, 2 reverb: something was sent this block */
 
 static void fx_press(uint32_t i)                /* main loop: a pad went down */
 {
@@ -83,17 +86,59 @@ static void fx_tick(void)                       /* 60 Hz, audio side: the ramps 
     if (m & FXB(FX_VERB)) fx_verb_tail = 200u; else if (fx_verb_tail) fx_verb_tail--;
 }
 
-/* the master chain, over n stereo frames, only while something needs it */
+/* the master chain, over n stereo frames, only while something needs it.
+ * The sends (proc.c's buses) feed the chorus, the delay and the reverb; the ECHO and VERB pads feed the whole mix into the same delay and reverb.
+ * The delay runs at the full rate up to half a second (as the old echo), at half the rate up to a second. MIX view settings: mset (ext_def.h). */
 static int32_t fx_g = 256, fx_held_l, fx_held_r, fx_lp1[2], fx_lp2[2];
-static uint32_t fx_hold_n, fx_gp, echo_pos, vb_dirty;
+static uint32_t fx_hold_n, fx_gp, echo_pos, vb_dirty, echo_half;
+static int32_t echo_lp[2], echo_out[2], vb_genv, vb_gtime, rv_dc, dl_dc[2];
+#define CHO_LEN 1024u
+static int16_t cho_buf[CHO_LEN] POOL;
+static uint32_t cho_pos, cho_ph, cho_tail;
+static int32_t cho_dc;
+static int32_t cmp_env, cmp_g = 256;
+static void fx_chorus(int32_t *out, uint32_t n)         /* the Juno's way: one delay line, two taps swung by one LFO in opposite ways, left and right */
+{
+    static const uint16_t RATE[4] = {0, 49, 81, 950}, DEPTH[4] = {0, 70, 100, 14};       /* per mode: 2^32 / FS / 1000 Hz units; samples of swing */
+    const uint32_t md = mset.cmode & 3u, inc = (uint32_t)RATE[md] * (8u + mset.crate) / 13u * 1000u;
+    const int32_t dep = (int32_t)DEPTH[md] * (int32_t)(4u + mset.cdep) / 12;
+    uint32_t i;
+    if (!md) return;
+    if (bus_used & 1u) cho_tail = 2000u;
+    if (!cho_tail) return;
+    cho_tail--;
+    for (i = 0; i < n; i++) {
+        int32_t x = bus_cho[i], tri, d1, d2, a, b, w, j;
+        cho_dc += (x - cho_dc) >> 10; x -= cho_dc;
+        cho_buf[cho_pos] = (int16_t)(x > 32767 ? 32767 : x < -32767 ? -32767 : x);
+        tri = (int32_t)(cho_ph >> 16); tri = tri < 32768 ? tri : 65535 - tri;                 /* 0..32767, a triangle */
+        d1 = (150 << 8) + (dep * tri >> 7); d2 = (150 << 8) + (dep * (32767 - tri) >> 7);       /* 3.4 ms and the swing, Q8 */
+        for (j = 0; j < 2; j++) {
+            const int32_t dl = j ? d2 : d1, di = dl >> 8, fr = dl & 255;
+            a = cho_buf[(cho_pos - (uint32_t)di) & (CHO_LEN - 1u)]; b = cho_buf[(cho_pos - (uint32_t)di - 1u) & (CHO_LEN - 1u)];
+            w = a + (((b - a) * fr) >> 8);
+            out[2u * i + (uint32_t)j] += w;
+        }
+        cho_pos = (cho_pos + 1u) & (CHO_LEN - 1u);
+        cho_ph += inc;
+    }
+}
 static void fx_master(int32_t *out, uint32_t n)
 {
     uint32_t m = fx_mask, i, bpm = seq_bpm < 40u ? 40u : seq_bpm > 240u ? 240u : seq_bpm;
-    uint32_t on = m & (FXB(FX_VERB) | FXB(FX_CRUSH) | FXB(FX_DECI) | FXB(FX_GATE) | FXB(FX_KILL) | FXB(FX_LPF) | FXB(FX_HPF) | FXB(FX_ECHO))
-                  || fx_lp_i || fx_hp_i || fx_echo_tail || fx_verb_tail || fx_speed < 256 || fx_g != 256;
-    uint32_t gate_p = 661500u / bpm, echo_d = 1323000u / bpm;
+    uint32_t on, gate_p = 661500u / bpm, echo_d = (uint32_t)DLY_T[mset.dtime % DLY_N] * 110250u / bpm, half;
     uint32_t hold = (m & FXB(FX_DECI)) ? 8u : (m & FXB(FX_CRUSH)) ? 3u : 1u;
     int32_t a_lp = FX_LP_A[fx_lp_i], a_hp = FX_HP_A[fx_hp_i], tg = fx_speed >= 256 ? 256 : fx_speed * fx_speed >> 8;
+    const int32_t efb = 140 + ((int32_t)mset.dfb - 9) * ((int32_t)mset.dfb > 9 ? 16 : 15), pp = mset.dmode & 1u, etone = mset.dtone;
+    const int32_t vfb = 222 + ((int32_t)mset.rsize - 10) * 4, vda = 64 + (8 - (int32_t)mset.rdamp) * 8;
+    fx_chorus(out, n);
+    if (bus_used & 2u) fx_echo_tail = fx_echo_tail > 150u ? fx_echo_tail : 150u;
+    if (bus_used & 4u) fx_verb_tail = fx_verb_tail > 200u ? fx_verb_tail : 200u;
+    on = m & (FXB(FX_VERB) | FXB(FX_CRUSH) | FXB(FX_DECI) | FXB(FX_GATE) | FXB(FX_KILL) | FXB(FX_LPF) | FXB(FX_HPF) | FXB(FX_ECHO))
+         || fx_lp_i || fx_hp_i || fx_echo_tail || fx_verb_tail || fx_speed < 256 || fx_g != 256;
+    half = echo_d > ECHO_MAX;                   /* past half a second: the line at half the rate */
+    if (half) { echo_d /= 2u; if (echo_d > ECHO_MAX) echo_d = ECHO_MAX; }
+    if (half != echo_half) { echo_half = half; echo_pos = 0; }
     if (fx_echo_tail) echo_clr = 0;
     else if (echo_clr < ECHO_MAX) {                     /* the delay line is wiped a piece at a time once its tail is over, so the next echo starts clean */
         uint32_t w = ECHO_MAX - echo_clr < 2048u ? ECHO_MAX - echo_clr : 2048u;
@@ -101,8 +146,9 @@ static void fx_master(int32_t *out, uint32_t n)
         echo_clr += w;
     }
     if (!fx_verb_tail && vb_dirty) { memset(vb_comb, 0, sizeof vb_comb); memset(vb_ap, 0, sizeof vb_ap); memset(vb_lp, 0, sizeof vb_lp); vb_dirty = 0; }
-    if (!on) { fx_lp1[0] = fx_lp1[1] = fx_lp2[0] = fx_lp2[1] = 0; return; }
-    if (echo_d > ECHO_MAX) echo_d = ECHO_MAX;
+    if (!on) { fx_lp1[0] = fx_lp1[1] = fx_lp2[0] = fx_lp2[1] = 0; }
+    else {
+    if (echo_d < 1u) echo_d = 1u;
     for (i = 0; i < n; i++) {
         int32_t x[2], target = 256, c;
         if (m & FXB(FX_KILL)) target = 0;
@@ -114,26 +160,41 @@ static void fx_master(int32_t *out, uint32_t n)
             x[0] = fx_held_l; x[1] = fx_held_r;
             if (m & FXB(FX_CRUSH)) { x[0] = (x[0] >> 9) * 512; x[1] = (x[1] >> 9) * 512; }
         }
+        if (fx_echo_tail && (!half || !(i & 1u))) {      /* the delay: what comes back, and what goes in (the pad, the sends); ping-pong crosses the sides */
+            int32_t din[2], d[2];
+            for (c = 0; c < 2; c++) {
+                int32_t v = x[c];
+                if (a_hp) { int32_t t = fx_lp1[c] + (((v - fx_lp1[c]) * a_hp) >> 14); v -= t; }
+                if (a_lp < 16384) { int32_t t = fx_lp2[c] + (((v - fx_lp2[c]) * a_lp) >> 14); v = t; }
+                din[c] = ((m & FXB(FX_ECHO)) ? v : 0) + (bus_dly[2u * i + (uint32_t)c] - (dl_dc[c] += (bus_dly[2u * i + (uint32_t)c] - dl_dc[c]) >> 10));
+                d[c] = echo_buf[echo_pos][c];
+                if (etone) { echo_lp[c] += (d[c] - echo_lp[c]) * (16 - etone) >> 4; d[c] = echo_lp[c]; }
+            }
+            for (c = 0; c < 2; c++) {
+                int32_t nb = pp ? (c ? 0 : (din[0] + din[1]) >> 1) + (d[1 - c] * efb >> 8) : din[c] + (d[c] * efb >> 8);
+                nb = nb > 32767 ? 32767 : nb < -32767 ? -32767 : nb;
+                echo_buf[echo_pos][c] = (int16_t)nb;
+                echo_out[c] = d[c] * 150 >> 8;
+            }
+            if (++echo_pos >= echo_d) echo_pos = 0;
+        }
         for (c = 0; c < 2; c++) {
             int32_t v = x[c];
             if (a_hp) { fx_lp1[c] += ((v - fx_lp1[c]) * a_hp) >> 14; v -= fx_lp1[c]; }
             if (a_lp < 16384) { fx_lp2[c] += ((v - fx_lp2[c]) * a_lp) >> 14; v = fx_lp2[c]; }
-            if (fx_echo_tail) {                  /* the delay: what comes back, and what goes in while the pad is held */
-                int32_t d = echo_buf[echo_pos][c], w = (m & FXB(FX_ECHO)) ? v : 0, nb = w + (d * 140 >> 8);
-                nb = nb > 32767 ? 32767 : nb < -32767 ? -32767 : nb;
-                echo_buf[echo_pos][c] = (int16_t)nb;
-                v += d * 150 >> 8;
-            }
+            if (fx_echo_tail) v += echo_out[c];
             v = v * tg >> 8;
             out[2u * i + (uint32_t)c] = v;
         }
-        if (fx_verb_tail) {                      /* the reverb: four combs and two allpasses on the mono mix, spread to both sides */
-            int32_t in = (m & FXB(FX_VERB)) ? (out[2u * i] + out[2u * i + 1u]) >> 3 : 0, sum = 0, k, w;
+        if (fx_verb_tail) {                      /* the reverb: four combs and two allpasses on the mono mix, spread to both sides; gated: cut short after each hit */
+            int32_t rb = bus_rev[i] >> 2, in, sum = 0, k, w;
+            rv_dc += (rb - rv_dc) >> 10; rb -= rv_dc;
+            in = ((m & FXB(FX_VERB)) ? (out[2u * i] + out[2u * i + 1u]) >> 3 : 0) + rb;
             vb_dirty = 1;
             for (k = 0; k < VB_N; k++) {
                 int32_t d = vb_comb[k][vb_pos[k]];
-                vb_lp[k] += (d - vb_lp[k]) >> 2;                    /* the highs die first */
-                w = in + (vb_lp[k] * 222 >> 8);
+                vb_lp[k] += ((d - vb_lp[k]) * vda) >> 8;                    /* the highs die first */
+                w = in + (vb_lp[k] * vfb >> 8);
                 vb_comb[k][vb_pos[k]] = (int16_t)(w > 32767 ? 32767 : w < -32767 ? -32767 : w);
                 if (++vb_pos[k] >= VB_LEN[k]) vb_pos[k] = 0;
                 sum += d;
@@ -146,8 +207,28 @@ static void fx_master(int32_t *out, uint32_t n)
                 if (++ap_pos[k] >= AP_LEN[k]) ap_pos[k] = 0;
             }
             sum = sum * 3 >> 1;
+            if (mset.rgate) {                    /* the gate: a hit opens it, it shuts after RGATE x 25 ms */
+                const int32_t a = in < 0 ? -in : in;
+                if (a > 1200) vb_gtime = (int32_t)mset.rgate * 1102;
+                if (vb_gtime) { vb_gtime--; vb_genv += (256 - vb_genv) >> 4; } else vb_genv -= vb_genv >> 6;
+                sum = sum * vb_genv >> 8;
+            }
             out[2u * i] += sum; out[2u * i + 1u] += sum;
         }
-        if (fx_echo_tail && ++echo_pos >= echo_d) echo_pos = 0;
     }
+    }
+    if (mset.comp || mset.sat) {                 /* the master: a compressor (4:1, its threshold lower as COMP goes up, made up after) and saturation */
+        const int32_t T = 30000 - (int32_t)mset.comp * 1600, mk = 256 + (int32_t)mset.comp * 14, sg = 256 + (int32_t)mset.sat * 40;
+        for (i = 0; i < n; i++) {
+            int32_t l = out[2u * i], r = out[2u * i + 1u], a = (l < 0 ? -l : l) > (r < 0 ? -r : r) ? (l < 0 ? -l : l) : (r < 0 ? -r : r);
+            if (mset.comp) {
+                cmp_env += a > cmp_env ? (a - cmp_env) >> 4 : -((cmp_env - a) >> 12);
+                if (!(i & 15u)) cmp_g = cmp_env > T ? (int32_t)(((int64_t)(T + (cmp_env - T) / 4) << 8) / cmp_env) : 256;
+                l = (l * cmp_g >> 8) * mk >> 8; r = (r * cmp_g >> 8) * mk >> 8;
+            }
+            if (mset.sat) { l = sclip(l * sg >> 8); r = sclip(r * sg >> 8); }
+            out[2u * i] = l; out[2u * i + 1u] = r;
+        }
+    }
+    memset(bus_cho, 0, 4u * n); memset(bus_rev, 0, 4u * n); memset(bus_dly, 0, 8u * n); bus_used = 0;
 }

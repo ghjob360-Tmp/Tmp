@@ -1471,7 +1471,7 @@ static uint32_t voice_out(uint32_t c, uint32_t adv)      /* the pitch and the le
     vol_q = (vol_q * ((in->vol > 15u ? 15u : (uint32_t)in->vol) + 1u)) >> 4;
     if (x->ltgt == LT_VOL && x->ldep) { const uint32_t g = 256u - ((uint32_t)x->ldep * 17u * (uint32_t)(256 - vc[c].lfo2) >> 9); vol = (vol * g + 128u) >> 8; vol_q = vol_q * g >> 8; }       /* tremolo */
     if (duck_ch != 255u && c != duck_ch) { vol = vol * 5u >> 4; vol_q = vol_q * 5u >> 4; }       /* about -10 dB */
-    if (in->duck && duck_lvl) { const uint32_t g = 256u - ((in->duck > 15u ? 15u : (uint32_t)in->duck) * 17u * duck_lvl >> 8); vol = vol * g >> 8; vol_q = vol_q * g >> 8; }       /* the sidechain: a kick pulls it down, it comes back in about 180 ms */
+    if (in->duck && duck_lvl) { const uint32_t dl = mset.dshape == 1u ? duck_lvl * duck_lvl >> 8 : mset.dshape == 2u ? (duck_lvl > 128u ? 256u : duck_lvl * 2u) : duck_lvl, g = 256u - ((in->duck > 15u ? 15u : (uint32_t)in->duck) * 17u * dl >> 8); vol = vol * g >> 8; vol_q = vol_q * g >> 8; }       /* the sidechain: a kick pulls it down, it comes back in about 180 ms */
     if (fx_solo_ch != 255u && c != fx_solo_ch) { vol = 0; vol_q = 0; }
     set_osc(c, (uint32_t)pq, vol);
     if (chan[c].kind == KD_SID) vc[c].env = (uint16_t)(sid[c].env * 15u);       /* what the meter shows */
@@ -1483,7 +1483,8 @@ static void tick(void)
 {
     uint32_t chip, c;
     fx_tick();
-    duck_lvl = duck_lvl > 24u ? duck_lvl - 24u : 0u;
+    {   const uint32_t dd = mset.drel ? 256u / (4u + (uint32_t)mset.drel * 4u) + 1u : 24u;      /* the sidechain's way back: the old 180 ms, or RELEASE */
+        duck_lvl = duck_lvl > dd ? duck_lvl - dd : 0u; }
     tre_ph += 4041u; vib_ph += 6630u;
     for (chip = 0; chip < CHIPS; chip++) {
         uint32_t busy = 0;
@@ -1568,6 +1569,7 @@ static void arp_pulse(void)                     /* 24 a beat: the arps that run 
 #include "va.c"
 #include "seq.c"
 #include "fx.c"
+#include "proc.c"
 
 /* ---- changing the channel list (main loop; the audio side waits) */
 static int chan_add(uint32_t kind)               /* the new channel's number, or -1 when full */
@@ -1581,6 +1583,7 @@ static int chan_add(uint32_t kind)               /* the new channel's number, or
     memset(&vc[c], 0, sizeof vc[c]); vc[c].stage = ST_IDLE; memset(&fmo[c], 0, sizeof fmo[c]);
     memset(&osc[c], 0, sizeof osc[c]); osc[c].pan = 1; wkey[c] = 0; memset(dv[c], 0, sizeof dv[c]); memset(&sid[c], 0, sizeof sid[c]);
     chan_n++;
+    proc_reset();
     chan_lock = 0;
     return (int)c;
 }
@@ -1594,6 +1597,7 @@ static void chan_set_kind(uint32_t c, uint32_t kind)   /* the channel becomes an
     {   const ext_t keep = chan[c].x;                   /* the sound's extras start fresh; how the channel's steps run stays */
         memset(&chan[c].x, 0, sizeof chan[c].x); ext_default(kind, &chan[c].x); chan[c].in.arp_rate = X_RATE_DEF;
         chan[c].x.speed = keep.speed; chan[c].x.len = keep.len; chan[c].x.lkt = keep.lkt; chan[c].x.chv = keep.chv; }
+    proc_reset();
     memset(&vc[c], 0, sizeof vc[c]); vc[c].stage = ST_IDLE; memset(&fmo[c], 0, sizeof fmo[c]);
     memset(&osc[c], 0, sizeof osc[c]); osc[c].pan = 1; wkey[c] = 0; memset(dv[c], 0, sizeof dv[c]); memset(&sid[c], 0, sizeof sid[c]);
     chan_lock = 0;
@@ -1608,6 +1612,7 @@ static void chan_remove(uint32_t c)
     chan_n--;
     memset(&vc[chan_n], 0, sizeof vc[chan_n]); vc[chan_n].stage = ST_IDLE; memset(&fmo[chan_n], 0, sizeof fmo[chan_n]); memset(dv[chan_n], 0, sizeof dv[chan_n]); memset(&sid[chan_n], 0, sizeof sid[chan_n]);
     seq_chan_removed(c);
+    proc_reset();
     chan_lock = 0;
 }
 
@@ -1620,9 +1625,52 @@ static int32_t soft(int32_t x)
 }
 
 /* the app's audio entry: events, the tick every 1/60 s (sample accurate), then each sounding chip into the mix */
+static void render_chip(uint32_t chip, int32_t *buf, uint32_t run, uint8_t *act, uint32_t na)      /* the chip's voices in the list, into buf */
+{
+    switch (chip) {
+    case CHIP_NES: r_nes(buf, run, act, na); break;
+    case CHIP_GB: r_gb(buf, run, act, na); break;
+    case CHIP_PCE: r_pce(buf, run, act, na); break;
+    case CHIP_TIA: r_tia(buf, run, act, na); break;
+    case CHIP_VRC6: r_vrc6(buf, run, act, na); break;
+    case CHIP_AY: r_ay(buf, run, act, na); break;
+    case CHIP_MD: r_fm4x(buf, run, act, na, 2); break;
+    case CHIP_VB: r_vb(buf, run, act, na); break;
+    case CHIP_POKEY: r_pokey(buf, run, act, na); break;
+    case CHIP_SPK: r_spk(buf, run, act, na); break;
+    case CHIP_OPL: r_fm2x(buf, run, act, na); break;
+    case CHIP_WSG: r_wave4(buf, run, act, na, 0); break;
+    case CHIP_N163: r_wave4(buf, run, act, na, 1); break;
+    case CHIP_S5B: r_s5b(buf, run, act, na); break;
+    case CHIP_MMC5: r_mmc5(buf, run, act, na); break;
+    case CHIP_FDS: r_fds(buf, run, act, na); break;
+    case CHIP_SCC: r_scc(buf, run, act, na); break;
+    case CHIP_OPLL: case CHIP_VRC7: r_fm2x(buf, run, act, na); break;
+    case CHIP_OPM: r_fm4x(buf, run, act, na, 0); break;
+    case CHIP_OPL3: r_fm4x(buf, run, act, na, 0); break;
+    case CHIP_WS: r_ws(buf, run, act, na); break;
+    case CHIP_SAA: r_saa(buf, run, act, na); break;
+    case CHIP_VIC: r_vic(buf, run, act, na); break;
+    case CHIP_TED: r_ted(buf, run, act, na); break;
+    case CHIP_LYNX: r_lynx(buf, run, act, na); break;
+    case CHIP_PC98: r_two(buf, run, act, na, KD_PC98_FM); break;
+    case CHIP_OPN: r_two(buf, run, act, na, KD_OPN_FM); break;
+    case CHIP_SID: r_sid(buf, run, act, na); break;
+    case CHIP_NEO: r_two(buf, run, act, na, KD_NEO_FM); break;
+    case CHIP_NGP: r_ngp(buf, run, act, na); break;
+    case CHIP_OPL1: r_fm2x(buf, run, act, na); break;
+    case CHIP_OPZ: r_fm4x(buf, run, act, na, 0); break;
+    case CHIP_SN77: r_sn77(buf, run, act, na); break;
+    case CHIP_C30: r_c30(buf, run, act, na); break;
+    case CHIP_MSM: r_msm(buf, run, act, na); break;
+    case CHIP_ZX: r_zx(buf, run, act, na); break;
+    default: r_sms(buf, run, act, na); break;
+    }
+}
+static uint32_t chip_stereo(uint32_t chip) { return STEREO_IDX(chip) >= 0 || chip == CHIP_GB || chip == CHIP_PCE || chip == CHIP_MD || chip == CHIP_VB; }
 static void chip_render(int32_t *out, uint32_t n)
 {
-    static int32_t mix[2u * 256u];
+    static int32_t mix[2u * 256u], chb[2u * 256u];
     static uint8_t act[MAXCH], actd[MAXCH];
     uint32_t i = 0, chip, k, na, nd, duck = brothers_mode == 2u && bt_side ? brothers_duck(190u) : 256u;
     if (chan_lock) return;
@@ -1658,6 +1706,16 @@ static void chip_render(int32_t *out, uint32_t n)
             if (!awake[chip]) continue;
             na = active_of(chip, act, 0); nd = active_of(chip, actd, 1);
             memset(mix, 0, 8u * run);
+            {   uint32_t kk, keep = 0;                      /* the channels with a chain of their own: one at a time, through it */
+                for (kk = 0; kk < na; kk++) {
+                    const uint32_t c1 = act[kk];
+                    if (!ch_proc(c1)) { act[keep++] = act[kk]; continue; }
+                    memset(chb, 0, 8u * run);
+                    if (IS_NZK(chan[c1].kind)) r_nz(chb, run, &act[kk], 1); else render_chip(chip, chb, run, &act[kk], 1);
+                    proc_chain(c1, chb, run, i, chip_stereo(chip));
+                    for (k = 0; k < 2u * run; k++) mix[k] += chb[k];
+                }
+                na = keep; }
             { uint32_t nn = 0, kk, keep = 0;                    /* the noise voices (NES, Game Boy, PC Engine, Virtual Boy) go to r_nz, the rest to the chip's renderer */
               uint8_t nzl[MAXCH];
               if (chip == CHIP_NES || chip == CHIP_GB || chip == CHIP_PCE || chip == CHIP_VB) {
@@ -1665,48 +1723,20 @@ static void chip_render(int32_t *out, uint32_t n)
                   na = keep;
                   if (nn) r_nz(mix, run, nzl, nn);
               } }
-            if (na) switch (chip) {
-            case CHIP_NES: r_nes(mix, run, act, na); break;
-            case CHIP_GB: r_gb(mix, run, act, na); break;
-            case CHIP_PCE: r_pce(mix, run, act, na); break;
-            case CHIP_TIA: r_tia(mix, run, act, na); break;
-            case CHIP_VRC6: r_vrc6(mix, run, act, na); break;
-            case CHIP_AY: r_ay(mix, run, act, na); break;
-            case CHIP_MD: r_fm4x(mix, run, act, na, 2); break;
-            case CHIP_VB: r_vb(mix, run, act, na); break;
-            case CHIP_POKEY: r_pokey(mix, run, act, na); break;
-            case CHIP_SPK: r_spk(mix, run, act, na); break;
-            case CHIP_OPL: r_fm2x(mix, run, act, na); break;
-            case CHIP_WSG: r_wave4(mix, run, act, na, 0); break;
-            case CHIP_N163: r_wave4(mix, run, act, na, 1); break;
-            case CHIP_S5B: r_s5b(mix, run, act, na); break;
-            case CHIP_MMC5: r_mmc5(mix, run, act, na); break;
-            case CHIP_FDS: r_fds(mix, run, act, na); break;
-            case CHIP_SCC: r_scc(mix, run, act, na); break;
-            case CHIP_OPLL: case CHIP_VRC7: r_fm2x(mix, run, act, na); break;
-            case CHIP_OPM: r_fm4x(mix, run, act, na, 0); break;
-            case CHIP_OPL3: r_fm4x(mix, run, act, na, 0); break;
-            case CHIP_WS: r_ws(mix, run, act, na); break;
-            case CHIP_SAA: r_saa(mix, run, act, na); break;
-            case CHIP_VIC: r_vic(mix, run, act, na); break;
-            case CHIP_TED: r_ted(mix, run, act, na); break;
-            case CHIP_LYNX: r_lynx(mix, run, act, na); break;
-            case CHIP_PC98: r_two(mix, run, act, na, KD_PC98_FM); break;
-            case CHIP_OPN: r_two(mix, run, act, na, KD_OPN_FM); break;
-            case CHIP_SID: r_sid(mix, run, act, na); break;
-            case CHIP_NEO: r_two(mix, run, act, na, KD_NEO_FM); break;
-            case CHIP_NGP: r_ngp(mix, run, act, na); break;
-            case CHIP_OPL1: r_fm2x(mix, run, act, na); break;
-            case CHIP_OPZ: r_fm4x(mix, run, act, na, 0); break;
-            case CHIP_SN77: r_sn77(mix, run, act, na); break;
-            case CHIP_C30: r_c30(mix, run, act, na); break;
-            case CHIP_MSM: r_msm(mix, run, act, na); break;
-            case CHIP_ZX: r_zx(mix, run, act, na); break;
-            default: r_sms(mix, run, act, na); break;
-            }
+            if (na) render_chip(chip, mix, run, act, na);
             post(chip, mix, run);
             if (duck < 256u) for (k = 0; k < 2u * run; k++) mix[k] = ((mix[k] >> 4) * (int32_t)duck) >> 4;      /* the sidechain: the notes duck, the drum kit does not */
-            if (nd) r_drum(mix, run, actd, nd);                 /* the console's drum kit, past its analog stage */
+            if (nd) {                                           /* the console's drum kit, past its analog stage (a kit with a chain: through it) */
+                uint32_t kk, keep = 0;
+                for (kk = 0; kk < nd; kk++) {
+                    if (!ch_proc(actd[kk])) { actd[keep++] = actd[kk]; continue; }
+                    memset(chb, 0, 8u * run);
+                    r_drum(chb, run, &actd[kk], 1);
+                    proc_chain(actd[kk], chb, run, i, 0);
+                    for (k = 0; k < 2u * run; k++) mix[k] += chb[k];
+                }
+                if (keep) r_drum(mix, run, actd, keep);
+            }
             for (k = 0; k < 2u * run; k++) out[2u * i + k] += mix[k];
         }
         i += run; tick_left -= run;

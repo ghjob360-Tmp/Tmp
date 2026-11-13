@@ -25,10 +25,65 @@ static uint32_t undo_open, undo_t;               /* a group of edits is open: it
 static void undo_push(void);
 static void proj_edited(void) { if (!undo_open) undo_push(); undo_open = 1; undo_t = fm1_ms; proj_dirty = 1; proj_t_edit = fm1_ms; }
 
+/* version 6's block, after the song: 'X', 1, the master settings, each channel's extras (a length byte first), the steps' spare bytes that are set
+ * (page, channel, step, byte), the steps' extras table (key, lock, flags). An older firmware stops reading at the song. */
+static uint32_t proj_pack_x(uint8_t *p, uint32_t n)
+{
+    uint32_t c, pg, s, cnt, at;
+    const uint32_t lim = PROJ_BANK - PROJ_HDR;
+    if (n + 2u + MSET_BYTES + chan_n * (1u + EXT_BYTES) + 4u > lim) return 0;
+    p[n++] = 'X'; p[n++] = 1;
+    memcpy(p + n, &mset, MSET_BYTES); n += MSET_BYTES;
+    for (c = 0; c < chan_n; c++) { p[n++] = EXT_BYTES; memcpy(p + n, &chan[c].x, EXT_BYTES); n += EXT_BYTES; }
+    at = n; n += 2u; cnt = 0;
+    for (pg = 0; pg < page_n; pg++) for (c = 0; c < chan_n; c++) for (s = 0; s < SEQ_LEN; s++)
+        if (pat[pg][c][s].spare) {
+            if (n + 4u + 2u > lim) return 0;
+            p[n++] = (uint8_t)pg; p[n++] = (uint8_t)c; p[n++] = (uint8_t)s; p[n++] = pat[pg][c][s].spare; cnt++;
+        }
+    p[at] = (uint8_t)cnt; p[at + 1u] = (uint8_t)(cnt >> 8);
+    at = n; n += 2u; cnt = 0;
+    for (s = 0; s < sx_n; s++) {
+        if ((sx[s].key >> 8) >= page_n || (sx[s].key >> 4 & 15u) >= chan_n) continue;
+        if (n + 4u > lim) return 0;
+        p[n++] = (uint8_t)sx[s].key; p[n++] = (uint8_t)(sx[s].key >> 8); p[n++] = sx[s].lock; p[n++] = sx[s].fl; cnt++;
+    }
+    p[at] = (uint8_t)cnt; p[at + 1u] = (uint8_t)(cnt >> 8);
+    return n;
+}
+static void proj_unpack_x(const uint8_t *p, uint32_t n, uint32_t len, uint32_t chans)       /* version 6's block, if it is there and whole; what is missing stays at its default */
+{
+    uint32_t c, i, cnt;
+    mset = MSET_DEF;
+    if (n + 2u + MSET_BYTES > len || p[n] != 'X' || p[n + 1u] != 1u) return;
+    n += 2u;
+    memcpy(&mset, p + n, MSET_BYTES); n += MSET_BYTES;
+    for (c = 0; c < chans; c++) {
+        uint32_t l;
+        if (n >= len) return;
+        l = p[n++];
+        if (n + l > len) return;
+        memcpy(&chan[c].x, p + n, l < EXT_BYTES ? l : EXT_BYTES);
+        n += l;
+    }
+    if (n + 2u > len) return;
+    cnt = (uint32_t)p[n] | (uint32_t)p[n + 1u] << 8; n += 2u;
+    for (i = 0; i < cnt && n + 4u <= len; i++, n += 4u)
+        if (p[n] < page_n && p[n + 1u] < chans && p[n + 2u] < SEQ_LEN) pat[p[n]][p[n + 1u]][p[n + 2u]].spare = p[n + 3u];
+    if (n + 2u > len) return;
+    cnt = (uint32_t)p[n] | (uint32_t)p[n + 1u] << 8; n += 2u;
+    sx_busy = 1;
+    for (i = 0; i < cnt && n + 4u <= len && sx_n < SX_MAX; i++, n += 4u) {
+        const uint32_t key = (uint32_t)p[n] | (uint32_t)p[n + 1u] << 8;
+        if ((key >> 8) < page_n && (key >> 4 & 15u) < chans && p[n + 3u]) { sx[sx_n].key = (uint16_t)key; sx[sx_n].lock = p[n + 2u]; sx[sx_n].fl = p[n + 3u]; sx_n++; }
+    }
+    sx_busy = 0;
+    sx_sort();
+}
 static uint32_t proj_pack(uint8_t *p)           /* the project to bytes: the length, or 0 when it does not fit a bank */
 {
     uint32_t n = 0, pg, c, s, ev = 0, evat;
-    p[n++] = 5;                                 /* version 5: after a channel's sound a length byte and that many extra bytes (0: the defaults; byte 0 the sidechain, then an FM chip's patch, bit packed: fm.c) */
+    p[n++] = 6;                                 /* version 5: after a channel's sound a length byte and that many extra bytes (0: the defaults; byte 0 the sidechain, then an FM chip's patch, bit packed: fm.c); 6: the extensions' block after the song */
     p[n++] = (uint8_t)seq_bpm; p[n++] = (uint8_t)(seq_bpm >> 8);
     p[n++] = (uint8_t)page_n; p[n++] = (uint8_t)chan_n;
     for (c = 0; c < chan_n; c++) {
@@ -59,12 +114,12 @@ static uint32_t proj_pack(uint8_t *p)           /* the project to bytes: the len
     if (n + 1u + song_len > PROJ_BANK - PROJ_HDR) return 0;
     p[n++] = (uint8_t)song_len;                 /* the song: a page for each slot */
     for (s = 0; s < song_len; s++) p[n++] = song[s];
-    return n;
+    return proj_pack_x(p, n);
 }
 static int proj_check(const uint8_t *p, uint32_t len)       /* 0: these bytes are a project this firmware can load */
 {
     uint32_t n, i, c, ev, pages, chans, isz;
-    if (len < 7u || p[0] < 2u || p[0] > 5u) return -1;
+    if (len < 7u || p[0] < 2u || p[0] > 6u) return -1;
     isz = p[0] == 2u ? 14u : PROJ_INST;
     pages = p[3]; chans = p[4];
     if (pages < 1u || pages > SEQ_PAGES || chans > MAXCH) return -1;
@@ -126,10 +181,13 @@ static int proj_unpack(const uint8_t *p, uint32_t len)      /* 0: loaded; else n
     if (n < len && p[n] >= 1u && p[n] <= SONG_MAX && n + 1u + p[n] <= len) {       /* the song (older projects have none: the pages in order) */
         song_len = p[n];
         for (i = 0; i < song_len; i++) song[i] = p[n + 1u + i] < pages ? p[n + 1u + i] : (uint8_t)(pages - 1u);
+        n += 1u + song_len;
     } else {
         song_len = pages < SONG_MAX ? pages : SONG_MAX;
         for (i = 0; i < song_len; i++) song[i] = (uint8_t)i;
+        n = len;
     }
+    if (p[0] >= 6u) proj_unpack_x(p, n, len, chans); else mset = MSET_DEF;
     return 0;
 }
 /* undo: the project as bytes before each group of edits, the last UNDO_N of them. LFO steps back one. */

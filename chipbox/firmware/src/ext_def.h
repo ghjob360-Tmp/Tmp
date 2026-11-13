@@ -39,7 +39,8 @@ typedef struct {
     uint8_t speed, len, lkt, chv;               /* the channel's steps: speed (STEP_SPD index), length (0 = 16), what a step's lock moves (LK_*), chord voices on the channels below 0..3 */
     uint8_t va[12];                             /* the VA synth, the SNES and the Amiga (va.c) */
 } ext_t;
-#define EXT_BYTES 40u                           /* saved bytes of an ext_t (proj.c): the fields above in order */
+#define EXT_BYTES 38u                           /* saved bytes of an ext_t (proj.c): the fields above in order */
+typedef char ext_size_ok[sizeof(ext_t) == EXT_BYTES ? 1 : -1];
 enum { LT_OFF, LT_PITCH, LT_CUT, LT_VOL, LT_PAN, LT_PWM, LT_N };
 static const char *const LT_NAME[LT_N] = {"OFF", "PITCH", "CUT", "VOL", "PAN", "PWM"};
 static const char *const LS_NAME[5] = {"TRI", "SAW", "SQR", "S&H", "RAMP"};
@@ -63,7 +64,9 @@ typedef struct {
     uint8_t comp, sat, drel, dshape;            /* master: compressor, saturation 0..15; the sidechain's release 0..15 (0 the old 180 ms), its shape 0..2 */
 } mset_t;
 #define MSET_BYTES 20u
+static const mset_t MSET_DEF = {0, 0, 0, 0, 1, 5, 8, 0, 2, 9, 0, 10, 8, 6, 0, 0, 0, 0, 0, 0};
 static mset_t mset = {0, 0, 0, 0, 1, 5, 8, 0, 2, 9, 0, 10, 8, 6, 0, 0, 0, 0, 0, 0};
+typedef char mset_size_ok[sizeof(mset_t) == MSET_BYTES ? 1 : -1];
 #define DLY_N 9u
 static const char *const DLY_NAME[DLY_N] = {"1/16", "1/8T", "1/8", "1/8D", "1/4T", "1/4", "1/4D", "1/2", "3/16"};
 static const uint8_t DLY_T[DLY_N] = {6, 8, 12, 18, 16, 24, 36, 48, 18};        /* clock ticks (24 a beat) */
